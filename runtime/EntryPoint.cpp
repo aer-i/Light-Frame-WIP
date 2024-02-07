@@ -10,9 +10,9 @@ auto main() -> int
         Engine::Execute();
         Engine::Teardown();
     }
-    catch(std::exception const& e)
+    catch (std::exception const& e)
     {
-        LOG(FATAL) << e.what() << '\n';
+        LOG(FATAL, "Exception") << e.what() << '\n';
         return EXIT_FAILURE;
     }
 }
