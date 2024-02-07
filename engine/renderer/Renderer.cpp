@@ -7,10 +7,7 @@
 #include <array>
 #include <vector>
 #include <memory>
-#include <functional>
 #include <string>
-#include <string_view>
-#include <thread>
 #include <cstring>
 #include "Types.hpp"
 #include "Window.hpp"
@@ -203,51 +200,21 @@ namespace vk
 
         VkPhysicalDeviceVulkan11Features vulkan11Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
         vulkan11Features.shaderDrawParameters     = true;
-        vulkan11Features.multiview                = true;
-        vulkan11Features.storageBuffer16BitAccess = true;
 
         VkPhysicalDeviceVulkan12Features vulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
         vulkan12Features.pNext = &vulkan11Features;
         vulkan12Features.runtimeDescriptorArray                             = true;
-        vulkan12Features.descriptorBindingVariableDescriptorCount           = true;
         vulkan12Features.descriptorBindingPartiallyBound                    = true;
-        vulkan12Features.shaderUniformTexelBufferArrayDynamicIndexing       = true;
-        vulkan12Features.shaderStorageTexelBufferArrayDynamicIndexing       = true;
-        vulkan12Features.shaderUniformBufferArrayNonUniformIndexing         = true;
-        vulkan12Features.shaderSampledImageArrayNonUniformIndexing          = true;
-        vulkan12Features.shaderStorageBufferArrayNonUniformIndexing         = true;
-        vulkan12Features.shaderStorageImageArrayNonUniformIndexing          = true;
-        vulkan12Features.shaderUniformTexelBufferArrayNonUniformIndexing    = true;
-        vulkan12Features.shaderStorageTexelBufferArrayNonUniformIndexing    = true;
-        vulkan12Features.descriptorBindingSampledImageUpdateAfterBind       = true;
-        vulkan12Features.descriptorBindingStorageImageUpdateAfterBind       = true;
-        vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind      = true;
-        vulkan12Features.descriptorBindingUniformTexelBufferUpdateAfterBind = true;
-        vulkan12Features.descriptorBindingStorageTexelBufferUpdateAfterBind = true;
-        vulkan12Features.drawIndirectCount                                  = true;
-        vulkan12Features.storageBuffer8BitAccess                            = true;
-        vulkan12Features.uniformAndStorageBuffer8BitAccess                  = true;
-        vulkan12Features.shaderInt8                                         = true;
-        vulkan12Features.samplerFilterMinmax                                = true;
-        vulkan12Features.scalarBlockLayout                                  = true;
 
         VkPhysicalDeviceVulkan13Features vulkan13Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
         vulkan13Features.pNext = &vulkan12Features;
         vulkan13Features.synchronization2 = true;
         vulkan13Features.dynamicRendering = true;
-        vulkan13Features.maintenance4     = true;
 
         VkPhysicalDeviceFeatures2 enabledFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
         enabledFeatures.pNext = &vulkan13Features;
         enabledFeatures.features.fillModeNonSolid        = true;
-        enabledFeatures.features.wideLines               = true;
-        enabledFeatures.features.depthClamp              = true;
         enabledFeatures.features.multiDrawIndirect       = true;
-        enabledFeatures.features.shaderInt16             = true;
-        enabledFeatures.features.shaderInt64             = true;
-        enabledFeatures.features.pipelineStatisticsQuery = true;
-        enabledFeatures.features.samplerAnisotropy       = true;
-        enabledFeatures.features.sampleRateShading       = true;
 
         char const* extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
