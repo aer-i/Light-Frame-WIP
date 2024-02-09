@@ -49,7 +49,7 @@ public:
                 typename std::enable_if<std::is_convertible<decltype(std::declval<V>().data()), T*>::value&&
                                         std::is_convertible<decltype(std::declval<V>().size()), std::size_t>::value>::type* = nullptr>
     inline constexpr ArrayProxy(V const& v)
-        : m_count{ static_cast<uint32_t>(v.size()) }
+        : m_count{ static_cast<u32>(v.size()) }
         , m_ptr{ v.data() }
     {}
 

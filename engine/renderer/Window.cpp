@@ -35,6 +35,12 @@ auto Window::Update() -> void
     glfwPollEvents();
 }
 
+auto Window::SetTitle(std::string_view title) -> void
+{
+    m_title = title;
+    glfwSetWindowTitle(m_handle, m_title.c_str());
+}
+
 auto Window::FramebufferResizeCallback(GLFWwindow *window, i32 width, i32 height) -> void
 {
     m_size.x = width;
