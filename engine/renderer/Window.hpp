@@ -30,9 +30,9 @@ private:
     static auto PositionChangeCallback(GLFWwindow* window, i32 x, i32 y) -> void;
 
 private:
-    static inline GLFWwindow* m_handle      = nullptr;
-    static inline glm::ivec2  m_size        = glm::ivec2(1280, 720);
-    static inline glm::ivec2  m_pos         = glm::ivec2(50, 50);
-    static inline std::string m_title       = "Light Frame";
-    static inline bool        m_available   = true;
+    static inline GLFWwindow* m_handle    = nullptr;
+    static inline glm::ivec2  m_size      = glm::ivec2(1280, 720);
+    static inline glm::ivec2  m_pos       = glm::ivec2(50, 50);
+    static inline std::string m_title     = "Light Frame";
+    static inline bool        m_available = true;
 };

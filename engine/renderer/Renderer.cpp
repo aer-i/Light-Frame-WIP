@@ -15,7 +15,7 @@
 #include "Types.hpp"
 #include "Window.hpp"
 
-static VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, u64, size_t, i32, char const*, char const*, void*);
+static VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, uint64_t, size_t, int32_t, char const*, char const*, void*);
 static auto vkErrorString(VkResult result) -> char const*;
 static auto vkCheck(VkResult result) -> void;
 static auto readFile(std::string_view filepath) -> std::vector<char>;
@@ -816,15 +816,13 @@ namespace vk
         {
             if (swapchainImages[i].handleView) vkDestroyImageView(device, swapchainImages[i].handleView, nullptr);
         }
-        
-        swapchainImages.clear();
 
         u32 imageCount;
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
         std::vector<VkImage> images(imageCount);
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images.data());
 
-        swapchainImages.resize(imageCount);
+        swapchainImages = std::vector<Image>(imageCount);
 
         for (u32 i = 0; i < imageCount; ++i)
         {
@@ -974,9 +972,9 @@ static auto vkCheck(VkResult result) -> void
 static VkBool32 VKAPI_CALL debugReportCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT objectType,
-    u64 object,
+    uint64_t object,
     size_t location,
-    i32 messageCode,
+    int32_t messageCode,
     char const* pLayerPrefix,
     char const* pMessage,
     void* pUserData)
