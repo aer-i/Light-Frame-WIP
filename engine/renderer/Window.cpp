@@ -41,13 +41,13 @@ auto Window::SetTitle(std::string_view title) -> void
     glfwSetWindowTitle(m_handle, m_title.c_str());
 }
 
-auto Window::FramebufferResizeCallback(GLFWwindow *window, i32 width, i32 height) -> void
+auto Window::FramebufferResizeCallback(GLFWwindow* window, i32 width, i32 height) -> void
 {
     m_size.x = width;
     m_size.y = height;
 }
 
-auto Window::PositionChangeCallback(GLFWwindow *window, i32 x, i32 y) -> void
+auto Window::PositionChangeCallback(GLFWwindow* window, i32 x, i32 y) -> void
 {
     m_pos.x = x;
     m_pos.y = y;

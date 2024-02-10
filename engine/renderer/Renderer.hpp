@@ -2,6 +2,7 @@
 #include "Types.hpp"
 #include "ArrayProxy.hpp"
 #include <string>
+#include <functional>
 
 struct VkImage_T;
 struct VkImageView_T;
@@ -96,7 +97,7 @@ namespace vk
         Image() = default;
         ~Image();
 
-        auto loadFromSwapchain(VkImage image, VkImageView imageView, Format format) -> void;
+        auto loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void;
 
         VkImage handle;
         VkImageView handleView;
@@ -143,5 +144,8 @@ namespace vk
     auto cmdBarrier(Image& image, ImageLayout newLayout) -> void;
     auto cmdBindPipeline(Pipeline& pipeline)             -> void;
     auto cmdDraw(u32 vertexCount)                        -> void;
+    auto cmdNext()                                       -> void;
+    auto onResize(std::function<void()> resizeCallback)  -> void;
     auto createPipeline(PipelineConfig const& config)    -> Pipeline;
+    auto getCommandBufferCount()                         -> u32;
 }

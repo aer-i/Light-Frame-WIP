@@ -11,6 +11,11 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 
+if (MSVC)
+    target_compile_definitions(LightFrame PUBLIC _CRT_SECURE_NO_WARNINGS)
+    #set_target_properties(LightFrame PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
+endif()
+
 #compile shader to bin directory-------------------------------------
 
 find_program(GLSL_VALIDATOR glslangValidator HINTS

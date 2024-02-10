@@ -4,7 +4,6 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 #include <GLFW/glfw3.h>
-#include <array>
 #include <vector>
 #include <memory>
 #include <cstring>
@@ -19,8 +18,6 @@ static VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT, VkDebugRep
 static auto vkErrorString(VkResult result) -> char const*;
 static auto vkCheck(VkResult result) -> void;
 static auto readFile(std::string_view filepath) -> std::vector<char>;
-
-auto constexpr static g_framesInFlight = u32(2);
 
 namespace vk
 {
@@ -38,6 +35,7 @@ namespace vk
         auto createDevice()         -> void;
         auto createAllocator()      -> void;
         auto createSwapchain()      -> void;
+        auto recreateSwapchain()    -> void;
         auto teardown()             -> void;
 
     public:
@@ -45,8 +43,9 @@ namespace vk
         using CommandPoolVector   = std::vector<VkCommandPool>;
         using CommandBufferVector = std::vector<VkCommandBuffer>;
         using PipelineVector      = std::vector<VkPipeline>;
-        using SemaphoreArray      = std::array<VkSemaphore, g_framesInFlight>;
-        using FenceArray          = std::array<VkFence, g_framesInFlight>;
+        using SemaphoreVector     = std::vector<VkSemaphore>;
+        using FenceVector         = std::vector<VkFence>;
+        using ResizeCallback      = std::function<void()>;
 
     public:
         VmaAllocator             allocator;
@@ -63,13 +62,16 @@ namespace vk
         PipelineVector           pipelines;
         CommandPoolVector        commandPools;
         CommandBufferVector      commandBuffers;
-        SemaphoreArray           presentSemaphores;
-        SemaphoreArray           renderSemaphores;
-        FenceArray               fences;
+        SemaphoreVector          renderSemaphores;
+        SemaphoreVector          presentSemaphores;
+        FenceVector              fences;
         ImageVector              swapchainImages;
         Pipeline*                currentPipeline;
+        ResizeCallback           onResize;
         u32                      imageIndex;
         u32                      frameIndex;
+        u32                      currentCmd;
+        u32                      maxImageIndex;
     };
 
     auto static g_context = Context();
@@ -84,7 +86,7 @@ namespace vk
         } 
     }
 
-    auto Image::loadFromSwapchain(VkImage image, VkImageView imageView, Format format) -> void
+    auto Image::loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void
     {
         this->handle = image;
         this->handleView = imageView;
@@ -94,7 +96,7 @@ namespace vk
         this->aspect = Aspect::eColor;
         this->usage = ImageUsage::eColorAttachment | ImageUsage::eTransferDst;
         this->allocation = nullptr;
-        this->format = format;
+        this->format = imageFormat;
         this->layerCount = 1;
     }
 
@@ -116,19 +118,23 @@ namespace vk
         auto static previousWidth { g_context.extent.width  };
         auto static previousHeight{ g_context.extent.height };
 
-        vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], true, ~0ull));
-
         if (previousWidth  != Window::GetWidth() ||
             previousHeight != Window::GetHeight())
         {
-            vkDeviceWaitIdle(g_context.device);
+            g_context.recreateSwapchain();
+
             previousWidth  = Window::GetWidth();
             previousHeight = Window::GetHeight();
-
-            g_context.createSwapchain();
         }
 
-        auto result{ vkAcquireNextImageKHR(g_context.device, g_context.swapchain, ~0ull, g_context.renderSemaphores[g_context.frameIndex], nullptr, &g_context.imageIndex) };
+        auto result{ vkAcquireNextImageKHR(
+            g_context.device,
+            g_context.swapchain,
+            ~0ull,
+            g_context.renderSemaphores[g_context.frameIndex],
+            nullptr,
+            &g_context.imageIndex
+        ) };
 
         switch (result)
         {
@@ -136,8 +142,7 @@ namespace vk
         case VK_SUBOPTIMAL_KHR:
             break;
         case VK_ERROR_OUT_OF_DATE_KHR:
-            vkDeviceWaitIdle(g_context.device);
-            g_context.createSwapchain();
+            g_context.recreateSwapchain();
         default:
             vkCheck(result);
             break;
@@ -146,21 +151,19 @@ namespace vk
 
     auto present() -> void
     {
-        vkCheck(vkResetFences(g_context.device, 1, &g_context.fences[g_context.frameIndex]));
-
         VkPipelineStageFlags constexpr stage{ VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
         VkSubmitInfo submitInfo;
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.pNext = nullptr;
-        submitInfo.waitSemaphoreCount = 1;
         submitInfo.signalSemaphoreCount = 1;
+        submitInfo.waitSemaphoreCount = 1;
         submitInfo.commandBufferCount = 1;
         submitInfo.pWaitDstStageMask = &stage;
         submitInfo.pWaitSemaphores = &g_context.renderSemaphores[g_context.frameIndex];
         submitInfo.pSignalSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
         submitInfo.pCommandBuffers = &g_context.commandBuffers[g_context.imageIndex];
-        vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, g_context.fences[g_context.frameIndex]));
+        vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, nullptr));
 
         VkPresentInfoKHR presentInfo;
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -179,45 +182,44 @@ namespace vk
             break;
         case VK_SUBOPTIMAL_KHR:
         case VK_ERROR_OUT_OF_DATE_KHR:
-            vkDeviceWaitIdle(g_context.device);
-            g_context.createSwapchain();
+            g_context.recreateSwapchain();
             break;
         default:
             vkCheck(result);
             break;
         }
 
-        g_context.frameIndex = (g_context.frameIndex + 1) % g_framesInFlight;
+        g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
     }
 
     auto cmdBegin() -> void
     {
-        vkResetCommandPool(g_context.device, g_context.commandPools[g_context.imageIndex], 0);
+        vkCheck(vkResetCommandPool(g_context.device, g_context.commandPools[g_context.currentCmd], 0));
 
         VkCommandBufferBeginInfo beginInfo;
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.pInheritanceInfo = nullptr;
         beginInfo.pNext = nullptr;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-        vkCheck(vkBeginCommandBuffer(g_context.commandBuffers[g_context.imageIndex], &beginInfo));
+        vkCheck(vkBeginCommandBuffer(g_context.commandBuffers[g_context.currentCmd], &beginInfo));
     }
 
     auto cmdEnd() -> void
     {
-        vkCheck(vkEndCommandBuffer(g_context.commandBuffers[g_context.imageIndex]));
+        vkCheck(vkEndCommandBuffer(g_context.commandBuffers[g_context.currentCmd]));
     }
 
     auto cmdBeginPresent() -> void
     {
-        cmdBarrier(g_context.swapchainImages[g_context.imageIndex], ImageLayout::eColorAttachment);
-        cmdBeginRendering(g_context.swapchainImages[g_context.imageIndex]);
+        cmdBarrier(g_context.swapchainImages[g_context.currentCmd], ImageLayout::eColorAttachment);
+        cmdBeginRendering(g_context.swapchainImages[g_context.currentCmd]);
     }
 
     auto cmdEndPresent() -> void
     {
         cmdEndRendering();
-        cmdBarrier(g_context.swapchainImages[g_context.imageIndex], ImageLayout::ePresent);
+        cmdBarrier(g_context.swapchainImages[g_context.currentCmd], ImageLayout::ePresent);
     }
 
     auto cmdBeginRendering(Image const& image) -> void
@@ -226,9 +228,8 @@ namespace vk
         colorAttachment.imageView = image.handleView;
         colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         colorAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.clearValue.color = { 0, 0, 0, 0 };
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
         VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
         renderingInfo.flags = 0;
@@ -238,7 +239,7 @@ namespace vk
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachments = &colorAttachment;
 
-        vkCmdBeginRendering(g_context.commandBuffers[g_context.imageIndex], &renderingInfo);
+        vkCmdBeginRendering(g_context.commandBuffers[g_context.currentCmd], &renderingInfo);
 
         VkViewport viewport;
         viewport.minDepth = 0.f;
@@ -252,16 +253,16 @@ namespace vk
         scissor.offset = { };
         scissor.extent = { image.width, image.height };
 
-        vkCmdSetViewport(g_context.commandBuffers[g_context.imageIndex], 0, 1, &viewport);
-        vkCmdSetScissor(g_context.commandBuffers[g_context.imageIndex], 0, 1, &scissor);
+        vkCmdSetViewport(g_context.commandBuffers[g_context.currentCmd], 0, 1, &viewport);
+        vkCmdSetScissor(g_context.commandBuffers[g_context.currentCmd], 0, 1, &scissor);
     }
 
     auto cmdEndRendering() -> void
     {
-        vkCmdEndRendering(g_context.commandBuffers[g_context.imageIndex]);
+        vkCmdEndRendering(g_context.commandBuffers[g_context.currentCmd]);
     }
 
-    auto cmdBarrier(Image &image, ImageLayout newLayout) -> void
+    auto cmdBarrier(Image& image, ImageLayout newLayout) -> void
     {
         VkImageMemoryBarrier2 imageBarrier;
         imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -275,7 +276,7 @@ namespace vk
         imageBarrier.subresourceRange.baseArrayLayer = 0;
         imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageBarrier.image = g_context.swapchainImages[g_context.imageIndex].handle;
+        imageBarrier.image = image.handle;
 
         switch (image.layout)
         {
@@ -323,7 +324,7 @@ namespace vk
         dependency.memoryBarrierCount = 0;
         dependency.imageMemoryBarrierCount = 1;
         dependency.pImageMemoryBarriers = &imageBarrier;
-        vkCmdPipelineBarrier2(g_context.commandBuffers[g_context.imageIndex], &dependency);
+        vkCmdPipelineBarrier2(g_context.commandBuffers[g_context.currentCmd], &dependency);
 
         image.layout = newLayout;
     }
@@ -331,7 +332,7 @@ namespace vk
     auto cmdBindPipeline(Pipeline& pipeline) -> void
     {
         vkCmdBindPipeline(
-            g_context.commandBuffers[g_context.imageIndex],
+            g_context.commandBuffers[g_context.currentCmd],
             static_cast<VkPipelineBindPoint>(pipeline.bindPoint),
             g_context.pipelines[pipeline.handleIndex]
         );
@@ -341,7 +342,12 @@ namespace vk
 
     auto cmdDraw(u32 vertexCount) -> void
     {
-        vkCmdDraw(g_context.commandBuffers[g_context.imageIndex], vertexCount, 1, 0, 0);
+        vkCmdDraw(g_context.commandBuffers[g_context.currentCmd], vertexCount, 1, 0, 0);
+    }
+
+    auto cmdNext() -> void
+    {
+        g_context.currentCmd = (g_context.currentCmd + 1) % g_context.maxImageIndex;
     }
 
     auto createPipeline(PipelineConfig const& config) -> Pipeline
@@ -396,7 +402,7 @@ namespace vk
         VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
         rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE;
         rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
         rasterizationStateCreateInfo.lineWidth = 1.0f;
         rasterizationStateCreateInfo.depthClampEnable = false;
 
@@ -463,6 +469,16 @@ namespace vk
         };
     }
 
+    auto getCommandBufferCount() -> u32
+    {
+        return g_context.maxImageIndex;
+    }
+
+    auto onResize(std::function<void()> resizeCallback) -> void
+    {
+        g_context.onResize = std::move(resizeCallback);
+    }
+
     auto Context::createInstance() -> void
     {
         vkCheck(volkInitialize());
@@ -487,8 +503,7 @@ namespace vk
 
         VkValidationFeatureEnableEXT enabledValidationFeatures[] =
         {
-            VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT // Annoying thing, will be disabled later
+            VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
         };
 
         VkValidationFeaturesEXT validationFeatures = { VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT };
@@ -611,6 +626,7 @@ namespace vk
 
         VkPhysicalDeviceFeatures2 enabledFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
         enabledFeatures.pNext = &vulkan13Features;
+        enabledFeatures.features.fillModeNonSolid = true;
 
         auto const* extension{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -631,6 +647,9 @@ namespace vk
 
         vkGetDeviceQueue(device, graphicsQueue.family, graphicsQueue.index, &graphicsQueue.queue);
 
+        this->createAllocator();
+        this->createSwapchain();
+
         VkSemaphoreCreateInfo semaphoreCreateInfo;
         semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         semaphoreCreateInfo.pNext = nullptr;
@@ -641,20 +660,20 @@ namespace vk
         fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         fenceCreateInfo.pNext = nullptr;
 
-        for (size_t i = 0; i < g_framesInFlight; ++i)
+        renderSemaphores.resize(maxImageIndex);
+        presentSemaphores.resize(maxImageIndex);
+        fences.resize(maxImageIndex);
+        for (size_t i = 0; i < maxImageIndex; ++i)
         {
-            vkCheck(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &presentSemaphores[i]));
             vkCheck(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderSemaphores[i]));
+            vkCheck(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &presentSemaphores[i]));
             vkCheck(vkCreateFence(device, &fenceCreateInfo, nullptr, &fences[i]));
         }
-
-        this->createAllocator();
-        this->createSwapchain();
 
         VkCommandPoolCreateInfo commandPoolCreateInfo;
         commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         commandPoolCreateInfo.pNext = nullptr;
-        commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        commandPoolCreateInfo.flags = 0;
         commandPoolCreateInfo.queueFamilyIndex = graphicsQueue.family;
 
         commandPools.resize(swapchainImages.size());
@@ -786,21 +805,28 @@ namespace vk
             presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
         }
 
-        extent.width = std::clamp((u32)Window::GetWidth(), capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        extent.width  = std::clamp((u32)Window::GetWidth(),  capabilities.minImageExtent.width,  capabilities.maxImageExtent.width);
         extent.height = std::clamp((u32)Window::GetHeight(), capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
         auto oldSwapchain{ swapchain };
 
         colorFormat = surfaceFormat.format;
 
+        auto minImageCount{ std::max(3u, capabilities.minImageCount) };
+
+        if (capabilities.maxImageCount)
+        {
+            minImageCount = std::min(minImageCount, capabilities.maxImageCount);
+        }
+
         VkSwapchainCreateInfoKHR swapchainCreateInfo{ VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
-        swapchainCreateInfo.minImageCount    = std::max(3u, capabilities.minImageCount);
         swapchainCreateInfo.preTransform     = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
         swapchainCreateInfo.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         swapchainCreateInfo.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         swapchainCreateInfo.imageColorSpace  = surfaceFormat.colorSpace;
         swapchainCreateInfo.imageFormat      = surfaceFormat.format;
+        swapchainCreateInfo.minImageCount    = minImageCount;
         swapchainCreateInfo.presentMode      = presentMode;
         swapchainCreateInfo.surface          = surface;
         swapchainCreateInfo.imageExtent      = extent;
@@ -817,14 +843,13 @@ namespace vk
             if (swapchainImages[i].handleView) vkDestroyImageView(device, swapchainImages[i].handleView, nullptr);
         }
 
-        u32 imageCount;
-        vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
-        std::vector<VkImage> images(imageCount);
-        vkGetSwapchainImagesKHR(device, swapchain, &imageCount, images.data());
+        vkGetSwapchainImagesKHR(device, swapchain, &maxImageIndex, nullptr);
+        std::vector<VkImage> images(maxImageIndex);
+        vkGetSwapchainImagesKHR(device, swapchain, &maxImageIndex, images.data());
 
-        swapchainImages = std::vector<Image>(imageCount);
+        swapchainImages = std::vector<Image>(maxImageIndex);
 
-        for (u32 i = 0; i < imageCount; ++i)
+        for (u32 i = 0; i < maxImageIndex; ++i)
         {
             VkImageViewCreateInfo imageViewCreateInfo;
             imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -854,6 +879,18 @@ namespace vk
         LOG(INFO, "Vulkan Context") << "Created swapchain\n";
     }
 
+    auto Context::recreateSwapchain() -> void
+    {
+        while (Window::GetWidth() < 1 || Window::GetHeight() < 1)
+        {
+            Window::Update();
+        }
+
+        vkDeviceWaitIdle(g_context.device);
+        this->createSwapchain();
+        this->onResize();
+    }
+
     auto Context::teardown() -> void
     {
         vkDeviceWaitIdle(device);
@@ -871,13 +908,9 @@ namespace vk
             {
                 if (commandPools[i])               vkDestroyCommandPool(device, commandPools[i], nullptr);
                 if (swapchainImages[i].handleView) vkDestroyImageView(device, swapchainImages[i].handleView, nullptr);
-            }
-
-            for (u32 i = 0; i < g_framesInFlight; ++i)
-            {
-                if (fences[i])            vkDestroyFence(device, fences[i], nullptr);
-                if (renderSemaphores[i])  vkDestroySemaphore(device, renderSemaphores[i], nullptr);
-                if (presentSemaphores[i]) vkDestroySemaphore(device, presentSemaphores[i], nullptr);
+                if (fences[i])                     vkDestroyFence(device, fences[i], nullptr);
+                if (renderSemaphores[i])           vkDestroySemaphore(device, renderSemaphores[i], nullptr);
+                if (presentSemaphores[i])          vkDestroySemaphore(device, presentSemaphores[i], nullptr);
             }
 
             if (pipelineLayout) vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
