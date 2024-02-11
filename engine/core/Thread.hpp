@@ -26,10 +26,10 @@ public:
         }
     }
 
-    auto enqueue(std::function<void()> const& task) noexcept -> void
+    auto enqueue(std::function<void()>&& task) noexcept -> void
     {
         std::lock_guard<std::mutex> lock(m_queueMutex);
-        m_jobQueue.push(task);
+        m_jobQueue.push(std::move(task));
         m_conditionVariable.notify_one();
     }
 

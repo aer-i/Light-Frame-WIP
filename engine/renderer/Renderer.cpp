@@ -5,6 +5,7 @@
 #include <vk_mem_alloc.h>
 #include <GLFW/glfw3.h>
 #include <vector>
+#include <deque>
 #include <memory>
 #include <cstring>
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <fstream>
 #include "Types.hpp"
 #include "Window.hpp"
+#include "Thread.hpp"
 
 static VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, uint64_t, size_t, int32_t, char const*, char const*, void*);
 static auto vkErrorString(VkResult result) -> char const*;
@@ -38,17 +40,21 @@ namespace vk
         auto recreateSwapchain()    -> void;
         auto teardown()             -> void;
 
-    public:
-        using ImageVector         = std::vector<Image>;
-        using CommandPoolVector   = std::vector<VkCommandPool>;
-        using CommandBufferVector = std::vector<VkCommandBuffer>;
-        using PipelineVector      = std::vector<VkPipeline>;
-        using SemaphoreVector     = std::vector<VkSemaphore>;
-        using FenceVector         = std::vector<VkFence>;
-        using ResizeCallback      = std::function<void()>;
+    private:
+        using ImageVector            = std::vector<Image>;
+        using CommandPoolVector      = std::vector<VkCommandPool>;
+        using CommandBufferVector    = std::vector<VkCommandBuffer>;
+        using PipelineVector         = std::vector<VkPipeline>;
+        using PipelineLayoutVector   = std::vector<VkPipelineLayout>;
+        using DescriptorLayoutVector = std::vector<VkDescriptorSetLayout>;
+        using DescriptorVector       = std::vector<VkDescriptorSet>;
+        using SemaphoreVector        = std::vector<VkSemaphore>;
+        using FenceVector            = std::vector<VkFence>;
+        using ResizeCallback         = std::function<void()>;
 
     public:
         VmaAllocator             allocator;
+        QueueHandle              graphicsQueue;
         VkInstance               instance;
         VkDebugReportCallbackEXT debugCallback;
         VkSurfaceKHR             surface;
@@ -57,8 +63,10 @@ namespace vk
         VkSwapchainKHR           swapchain;
         VkExtent2D               extent;
         VkFormat                 colorFormat;
-        VkPipelineLayout         pipelineLayout;
-        QueueHandle              graphicsQueue;
+        VkDescriptorPool         descriptorPool;
+        DescriptorVector         descriptors;
+        DescriptorLayoutVector   descriptorLayouts;
+        PipelineLayoutVector     pipelineLayouts;
         PipelineVector           pipelines;
         CommandPoolVector        commandPools;
         CommandBufferVector      commandBuffers;
@@ -74,7 +82,7 @@ namespace vk
         u32                      maxImageIndex;
     };
 
-    auto static g_context = Context();
+    auto static g_context{ Context() };
 
     Image::~Image()
     {
@@ -84,6 +92,73 @@ namespace vk
         {
             if (handleView) vkDestroyImageView(device, handleView, nullptr);
         } 
+    }
+
+    Buffer::~Buffer()
+    {
+        if (g_context.device &&allocation && handle) vmaDestroyBuffer(g_context.allocator, handle, allocation);
+    }
+
+    auto Buffer::allocate(u32 dataSize, BufferUsageFlags usage, MemoryType memory) -> void
+    {
+        size = dataSize;
+
+        VkBufferCreateInfo bufferCreateInfo;
+        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferCreateInfo.pNext = nullptr;
+        bufferCreateInfo.flags = 0;
+        bufferCreateInfo.usage = usage;
+        bufferCreateInfo.size = size;
+        bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        bufferCreateInfo.queueFamilyIndexCount = 0;
+        bufferCreateInfo.pQueueFamilyIndices = nullptr;
+
+        VmaAllocationCreateInfo allocationCreateInfo{};
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+        switch (memory)
+        {
+        case MemoryType::eHost:
+            allocationCreateInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            allocationCreateInfo.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            allocationCreateInfo.flags  = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            allocationCreateInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT;
+            allocationCreateInfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            break;
+        case MemoryType::eHostOnly:
+            allocationCreateInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            allocationCreateInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+        case MemoryType::eDevice:
+            allocationCreateInfo.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            break;
+        default:
+            break;
+        }
+
+        auto allocationInfo{ VmaAllocationInfo() };
+
+        vkCheck(vmaCreateBuffer(
+            g_context.allocator,
+            &bufferCreateInfo,
+            &allocationCreateInfo,
+            &handle,
+            &allocation,
+            &allocationInfo
+        ));
+
+        mappedData = allocationInfo.pMappedData;
+
+        vmaGetAllocationMemoryProperties(g_context.allocator, allocation, &memoryType);
+    }
+
+    auto Buffer::writeData(void const *data) -> void
+    {
+        if (memoryType & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+        {
+            memcpy(mappedData, data, size);
+            vmaFlushAllocation(g_context.allocator, allocation, 0, size);
+        }
     }
 
     auto Image::loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void
@@ -98,6 +173,14 @@ namespace vk
         this->allocation = nullptr;
         this->format = imageFormat;
         this->layerCount = 1;
+    }
+
+    Pipeline::~Pipeline()
+    {
+        if (g_context.pipelines[handleIndex])         vkDestroyPipeline(g_context.device, g_context.pipelines[handleIndex], nullptr);
+        if (g_context.pipelineLayouts[handleIndex])   vkDestroyPipelineLayout(g_context.device, g_context.pipelineLayouts[handleIndex], nullptr);
+        if (descriptor != ~0u)
+        if (g_context.descriptorLayouts[descriptor])  vkDestroyDescriptorSetLayout(g_context.device, g_context.descriptorLayouts[descriptor], nullptr);
     }
 
     auto init() -> void
@@ -126,6 +209,9 @@ namespace vk
             previousWidth  = Window::GetWidth();
             previousHeight = Window::GetHeight();
         }
+
+        vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], false, ~0ull));
+        vkCheck(vkResetFences(g_context.device, 1, &g_context.fences[g_context.frameIndex]));
 
         auto result{ vkAcquireNextImageKHR(
             g_context.device,
@@ -163,7 +249,7 @@ namespace vk
         submitInfo.pWaitSemaphores = &g_context.renderSemaphores[g_context.frameIndex];
         submitInfo.pSignalSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
         submitInfo.pCommandBuffers = &g_context.commandBuffers[g_context.imageIndex];
-        vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, nullptr));
+        vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, g_context.fences[g_context.frameIndex]));
 
         VkPresentInfoKHR presentInfo;
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -190,6 +276,11 @@ namespace vk
         }
 
         g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
+    }
+
+    auto waitIdle() -> void
+    {
+        if (g_context.device) vkDeviceWaitIdle(g_context.device);
     }
 
     auto cmdBegin() -> void
@@ -337,6 +428,20 @@ namespace vk
             g_context.pipelines[pipeline.handleIndex]
         );
 
+        if (pipeline.descriptor != ~0u)
+        {
+            vkCmdBindDescriptorSets(
+                g_context.commandBuffers[g_context.currentCmd],
+                static_cast<VkPipelineBindPoint>(pipeline.bindPoint),
+                g_context.pipelineLayouts[pipeline.handleIndex],
+                0,
+                1,
+                &g_context.descriptors[pipeline.descriptor],
+                0,
+                 nullptr
+            );
+        }
+
         g_context.currentPipeline = &pipeline;
     }
 
@@ -353,7 +458,89 @@ namespace vk
     auto createPipeline(PipelineConfig const& config) -> Pipeline
     {
         auto static currentHandleIndex{ u32(0) };
-        auto pipeline{ VkPipeline(nullptr) };
+        auto static currentDescriptor { u32(0) };
+
+        auto descriptorSetLayout{ VkDescriptorSetLayout(nullptr) };
+        auto descriptorSet      { VkDescriptorSet(nullptr)       };
+        auto pipelineLayout     { VkPipelineLayout(nullptr)      };
+        auto pipeline           { VkPipeline(nullptr)            };
+
+        if (!config.descriptors.empty())
+        {
+            std::vector<VkDescriptorSetLayoutBinding> bindings(config.descriptors.size());
+            std::vector<VkWriteDescriptorSet> writes; writes.reserve(config.descriptors.size());
+            std::deque<VkDescriptorBufferInfo> bufferInfos;
+
+            for (auto i{ u32{} }; i < config.descriptors.size(); ++i)
+            {
+                auto const& descriptor{ config.descriptors[i] };
+
+                bindings[i].binding = descriptor.binding;
+                bindings[i].descriptorCount = descriptor.pBuffer ? 1 : 1024;
+                bindings[i].descriptorType = static_cast<VkDescriptorType>(descriptor.descriptorType);
+                bindings[i].pImmutableSamplers = nullptr;
+                bindings[i].stageFlags = descriptor.shaderStage;
+
+                if (!descriptor.pBuffer)
+                {
+                    break;
+                }
+
+                bufferInfos.push_back(VkDescriptorBufferInfo{
+                    .buffer = descriptor.pBuffer->handle,
+                    .offset = 0,
+                    .range = ~0ULL
+                });
+            }
+
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo;
+            descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            descriptorSetLayoutCreateInfo.pNext = nullptr;
+            descriptorSetLayoutCreateInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+            descriptorSetLayoutCreateInfo.bindingCount = static_cast<u32>(bindings.size());
+            descriptorSetLayoutCreateInfo.pBindings = bindings.data();
+            vkCheck(vkCreateDescriptorSetLayout(g_context.device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout));
+
+            VkDescriptorSetAllocateInfo descriptorSetAllocateInfo;
+            descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            descriptorSetAllocateInfo.pNext = nullptr;
+            descriptorSetAllocateInfo.descriptorPool = g_context.descriptorPool;
+            descriptorSetAllocateInfo.descriptorSetCount = 1;
+            descriptorSetAllocateInfo.pSetLayouts = &descriptorSetLayout;
+            vkCheck(vkAllocateDescriptorSets(g_context.device, &descriptorSetAllocateInfo, &descriptorSet));
+
+            for (auto i{ u32{} }; i < config.descriptors.size(); ++i)
+            {
+                auto const& descriptor{ config.descriptors[i] };
+
+                VkWriteDescriptorSet descriptorWrite;
+                descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrite.pNext = nullptr;
+                descriptorWrite.pTexelBufferView = nullptr;
+                descriptorWrite.dstArrayElement = 0;
+                descriptorWrite.dstBinding = descriptor.binding;
+                descriptorWrite.descriptorCount = 1;
+                descriptorWrite.descriptorType = static_cast<VkDescriptorType>(descriptor.descriptorType);
+                descriptorWrite.pImageInfo = nullptr;
+                descriptorWrite.pBufferInfo = &bufferInfos.back();
+                descriptorWrite.dstSet = descriptorSet;
+                writes.emplace_back(descriptorWrite);
+            }
+
+            if (!writes.empty())
+            {
+                vkUpdateDescriptorSets(g_context.device, static_cast<u32>(writes.size()), writes.data(), 0, nullptr);
+            }
+        }
+
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutCreateInfo.pNext = nullptr;
+        pipelineLayoutCreateInfo.flags = 0;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+        pipelineLayoutCreateInfo.setLayoutCount = descriptorSet ? 1 : 0;
+        pipelineLayoutCreateInfo.pSetLayouts = descriptorSet ? &descriptorSetLayout : nullptr;
+        vkCheck(vkCreatePipelineLayout(g_context.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStageCreateInfos(config.stages.size());
         std::vector<VkShaderModule> shaderModules(config.stages.size());
@@ -401,7 +588,7 @@ namespace vk
 
         VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
         rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE;
-        rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
         rasterizationStateCreateInfo.lineWidth = 1.0f;
         rasterizationStateCreateInfo.depthClampEnable = false;
@@ -445,7 +632,7 @@ namespace vk
         pipelineCreateInfo.pNext = (void*)&renderingCreateInfo;
         pipelineCreateInfo.stageCount = static_cast<u32>(shaderStageCreateInfos.size());
         pipelineCreateInfo.pStages = shaderStageCreateInfos.data();
-        pipelineCreateInfo.layout = g_context.pipelineLayout;
+        pipelineCreateInfo.layout = pipelineLayout;
         pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
         pipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
         pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
@@ -457,6 +644,13 @@ namespace vk
         vkCheck(vkCreateGraphicsPipelines(g_context.device, nullptr, 1, &pipelineCreateInfo, nullptr, &pipeline));
 
         g_context.pipelines.emplace_back(pipeline);
+        g_context.pipelineLayouts.emplace_back(pipelineLayout);
+
+        if (descriptorSet)
+        {
+            g_context.descriptorLayouts.emplace_back(descriptorSetLayout);
+            g_context.descriptors.emplace_back(descriptorSet);
+        }
 
         for (auto shaderModule : shaderModules)
         {
@@ -465,6 +659,7 @@ namespace vk
 
         return Pipeline{
             .handleIndex = currentHandleIndex++,
+            .descriptor = descriptorSet ? currentDescriptor++ : ~u32(0),
             .bindPoint = config.bindPoint
         };
     }
@@ -691,13 +886,20 @@ namespace vk
             vkCheck(vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffers[i]));
         }
 
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
-        pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.pNext = nullptr;
-        pipelineLayoutCreateInfo.flags = 0;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-        pipelineLayoutCreateInfo.setLayoutCount = 0;
-        vkCheck(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
+        VkDescriptorPoolSize poolSizes[] = {
+            { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1024 },
+            { .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         .descriptorCount = 1024 },
+            { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         .descriptorCount = 1024 }
+        };
+
+        VkDescriptorPoolCreateInfo descriptorPoolCreateInfo;
+        descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        descriptorPoolCreateInfo.pNext = nullptr;
+        descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+        descriptorPoolCreateInfo.maxSets = 1024;
+        descriptorPoolCreateInfo.poolSizeCount = 1;
+        descriptorPoolCreateInfo.pPoolSizes = poolSizes;
+        vkCheck(vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool));
 
         LOG(INFO, "Vulkan Context") << "Created device\n";
     }
@@ -899,11 +1101,6 @@ namespace vk
 
         if (device)
         {
-            for (auto pipeline : pipelines)
-            {
-                if (pipeline) vkDestroyPipeline(device, pipeline, nullptr);
-            }
-
             for (size_t i = 0; i < swapchainImages.size(); ++i)
             {
                 if (commandPools[i])               vkDestroyCommandPool(device, commandPools[i], nullptr);
@@ -913,8 +1110,8 @@ namespace vk
                 if (presentSemaphores[i])          vkDestroySemaphore(device, presentSemaphores[i], nullptr);
             }
 
-            if (pipelineLayout) vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-            if (swapchain)      vkDestroySwapchainKHR(device, swapchain, nullptr);
+            if (descriptorPool)      vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+            if (swapchain)           vkDestroySwapchainKHR(device, swapchain, nullptr);
             vkDestroyDevice(device, nullptr);
         }
 

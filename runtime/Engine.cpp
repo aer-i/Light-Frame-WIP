@@ -13,11 +13,29 @@ auto Engine::Init() -> void
 
 auto Engine::Execute() -> void
 {
+    struct Vertex
+    {
+        f32 x, y, z, w; // w for padding to 16 bytes
+    };
+
+    Vertex vertices[] = {
+        { -0.5f, -0.5f, 0.0f },
+        { 0.5f, -0.5f, 0.0f },
+        { 0.0f,  0.5f, 0.0f }
+    }; 
+
+    vk::Buffer vertexBuffer;
+    vertexBuffer.allocate(sizeof(vertices), vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    vertexBuffer.writeData(vertices);
+
     auto pipeline{ vk::createPipeline(vk::PipelineConfig{
         .bindPoint = vk::PipelineBindPoint::eGraphics,
         .stages = {
             { .stage = vk::ShaderStage::eVertex,   .filepath = "shaders/main.vert.spv"},
             { .stage = vk::ShaderStage::eFragment, .filepath = "shaders/main.frag.spv"}
+        },
+        .descriptors = {
+            { .pBuffer = &vertexBuffer, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eStorageBuffer, .binding = 0 }
         }
     })};
 
@@ -58,6 +76,7 @@ auto Engine::Execute() -> void
         vk::acquire();
         vk::present();
     }
+    vk::waitIdle();
 }
 
 auto Engine::Teardown() -> void

@@ -1,10 +1,9 @@
 #version 460
 
-vec3 positions[3] = vec3[](
-    vec3(0.0, -0.5, 0.0),
-    vec3(0.5, 0.5, 0.0),
-    vec3(-0.5, 0.5, 0.0)
-);
+layout(binding = 0) readonly restrict buffer VertexBuffer
+{
+    vec3 positions[];
+};
 
 void main()
 {

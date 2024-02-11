@@ -90,6 +90,11 @@ public:
         return m_ptr;
     }
 
+    inline auto operator[](u32 c) const -> T const&
+    {
+        return m_ptr[c];
+    }
+
 private:
     const u32 m_count;
     const T*  m_ptr;

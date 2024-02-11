@@ -6,9 +6,12 @@
 
 struct VkImage_T;
 struct VkImageView_T;
+struct VkBuffer_T;
 struct VmaAllocation_T;
+struct VmaAllocationInfo;
 
 using VkImage = VkImage_T*;
+using VkBuffer = VkBuffer_T*;
 using VkImageView = VkImageView_T*;
 using VmaAllocation = VmaAllocation_T*;
 
@@ -18,6 +21,7 @@ namespace vk
     using ImageUsageFlags = flags;
     using AspectFlags = flags;
     using ShaderStageFlags = flags;
+    using BufferUsageFlags = flags;
 
     namespace ImageUsage
     {
@@ -52,6 +56,18 @@ namespace vk
             eCompute = 0x00000020
         };
     }
+
+    namespace BufferUsage
+    {
+        enum
+        {
+            eTransferSrc = 0x00000001,
+            eTransferDst = 0x00000002,
+            eUniformBuffer = 0x00000010,
+            eStorageBuffer = 0x00000020,
+            eIndirectBuffer = 0x00000100
+        };
+    };
 
     enum class Format : flags
     {
@@ -91,6 +107,23 @@ namespace vk
         eCompute = 1
     };
 
+    enum class MemoryType : flags
+    {
+        eHost = 0x0,
+        eHostOnly = 0x1,
+        eDevice = 0x2
+    };
+
+    enum class DescriptorType : flags
+    {
+        eSampler = 0,
+        eCombinedImageSampler = 1,
+        eSampledImage = 2,
+        eStorageImage = 3,
+        eUniformBuffer = 6,
+        eStorageBuffer = 7
+    };
+
     class Image
     {
     public:
@@ -111,15 +144,42 @@ namespace vk
         u32 layerCount;
     };
 
+    class Buffer
+    {
+    public:
+        Buffer() = default;
+        ~Buffer();
+
+        auto allocate(u32 dataSize, BufferUsageFlags usage, MemoryType memory) -> void;
+        auto writeData(void const* data) -> void;
+
+        void* mappedData;
+        VkBuffer handle;
+        VmaAllocation allocation;
+        u32 memoryType;
+        u32 size;
+    };
+
     struct PipelineShaderStage
     {
         ShaderStageFlags stage;
         std::string      filepath;
     };
 
+    struct PipelineDescriptor
+    {
+        Buffer* pBuffer;
+        ShaderStageFlags shaderStage;
+        DescriptorType descriptorType;
+        u32 binding;
+    };
+
     struct Pipeline
     {
+        ~Pipeline();
+
         u32               handleIndex;
+        u32               descriptor;
         PipelineBindPoint bindPoint;
     };
 
@@ -127,6 +187,7 @@ namespace vk
     {
         PipelineBindPoint               bindPoint;
         ArrayProxy<PipelineShaderStage> stages;
+        ArrayProxy<PipelineDescriptor>  descriptors;
         bool                            depthWrite;
         bool                            colorBlending;
     };
@@ -135,6 +196,7 @@ namespace vk
     auto teardown()                                      -> void;
     auto acquire()                                       -> void;
     auto present()                                       -> void;
+    auto waitIdle()                                      -> void;
     auto cmdBegin()                                      -> void;
     auto cmdEnd()                                        -> void;
     auto cmdBeginPresent()                               -> void;
