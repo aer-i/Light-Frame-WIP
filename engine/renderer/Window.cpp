@@ -18,6 +18,7 @@ auto Window::Create() -> void
 
     glfwSetFramebufferSizeCallback(m_handle, Window::FramebufferResizeCallback);
     glfwSetWindowPosCallback(m_handle, Window::PositionChangeCallback);
+    glfwSetInputMode(m_handle, GLFW_STICKY_KEYS, GLFW_TRUE);
 
     LOG(INFO, "Window") << "Created window\n";
 }
@@ -31,8 +32,30 @@ auto Window::Teardown() -> void
 
 auto Window::Update() -> void
 {
+    auto static previousTime{ glfwGetTime() };
+    auto        currentTime { glfwGetTime() };
+
+    m_deltaTime =  static_cast<f32>(currentTime - previousTime);
     m_available = !static_cast<bool>(glfwWindowShouldClose(m_handle));
+
     glfwPollEvents();
+
+    previousTime = currentTime;
+}
+
+auto Window::IsKeyPressed(i32 key) -> bool
+{
+    return glfwGetKey(m_handle, key);
+}
+
+auto Window::IsKeyDown(i32 key) -> bool
+{
+    return glfwGetKey(m_handle, key) == GLFW_PRESS;
+}
+
+auto Window::IsKeyUp(i32 key) -> bool
+{
+    return glfwGetKey(m_handle, key) == GLFW_RELEASE;
 }
 
 auto Window::SetTitle(std::string_view title) -> void

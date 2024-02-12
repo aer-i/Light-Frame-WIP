@@ -12,9 +12,13 @@ public:
     static auto Teardown() -> void;
     static auto Update()   -> void;
     
+    static auto IsKeyPressed(i32 key)            -> bool;
+    static auto IsKeyDown(i32 key)               -> bool;
+    static auto IsKeyUp(i32 key)                 -> bool;
     static auto SetTitle(std::string_view title) -> void;
 
     static inline auto GetTime()   -> const f64          { return glfwGetTime(); }
+    static inline auto GetDelta()  -> const f32          { return m_deltaTime;   }
     static inline auto GetHandle() -> const GLFWwindow*  { return m_handle;      }
     static inline auto GetSize()   -> const glm::ivec2&  { return m_size;        }
     static inline auto GetWidth()  -> const i32          { return m_size.x;      }
@@ -34,5 +38,6 @@ private:
     static inline glm::ivec2  m_size      = glm::ivec2(1280, 720);
     static inline glm::ivec2  m_pos       = glm::ivec2(50, 50);
     static inline std::string m_title     = "Light Frame";
-    static inline bool        m_available = true;
+    static inline f32         m_deltaTime = f32(0.f);
+    static inline bool        m_available = bool(true);
 };

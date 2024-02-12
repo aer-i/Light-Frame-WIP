@@ -1,4 +1,5 @@
 #include "Engine.hpp"
+#include "Camera.hpp"
 #include "Window.hpp"
 #include "Renderer.hpp"
 #include "Thread.hpp"
@@ -13,20 +14,30 @@ auto Engine::Init() -> void
 
 auto Engine::Execute() -> void
 {
-    struct Vertex
-    {
-        f32 x, y, z, w; // w for padding to 16 bytes
+
+    f32 vertices[] = {
+        -0.5f, -0.5f, 0.0f,
+         0.5f, -0.5f, 0.0f,
+         0.5f,  0.5f, 0.0f,
+        -0.5f,  0.5f, 0.0f
     };
 
-    Vertex vertices[] = {
-        { -0.5f, -0.5f, 0.0f },
-        { 0.5f, -0.5f, 0.0f },
-        { 0.0f,  0.5f, 0.0f }
-    }; 
+    u32 indices[] = { 0, 1, 2, 0, 2, 3 };
+    glm::mat4 projection;
+    glm::mat4 view;
+    Camera camera;
+    camera.position = { 0.f, 0.f, 3.f };
 
-    vk::Buffer vertexBuffer;
-    vertexBuffer.allocate(sizeof(vertices), vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
-    vertexBuffer.writeData(vertices);
+    vk::Buffer positionBuffer;
+    vk::Buffer indexBuffer;
+    vk::Buffer uniformBuffer;
+    vk::Buffer colorBuffer;
+    positionBuffer.allocate(sizeof(vertices), vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    positionBuffer.writeData(vertices);
+    indexBuffer.allocate(sizeof(indices), vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    indexBuffer.writeData(indices);
+    uniformBuffer.allocate(sizeof(glm::mat4), vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
+    colorBuffer.allocate(sizeof(f32) * 3, vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
 
     auto pipeline{ vk::createPipeline(vk::PipelineConfig{
         .bindPoint = vk::PipelineBindPoint::eGraphics,
@@ -35,7 +46,10 @@ auto Engine::Execute() -> void
             { .stage = vk::ShaderStage::eFragment, .filepath = "shaders/main.frag.spv"}
         },
         .descriptors = {
-            { .pBuffer = &vertexBuffer, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eStorageBuffer, .binding = 0 }
+            { .binding = 0, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBuffer = &indexBuffer    },
+            { .binding = 1, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBuffer = &positionBuffer },
+            { .binding = 2, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBuffer = &uniformBuffer  },
+            { .binding = 3, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBuffer = &colorBuffer    }
         }
     })};
 
@@ -47,7 +61,7 @@ auto Engine::Execute() -> void
             vk::cmdBegin();
             vk::cmdBeginPresent();
             vk::cmdBindPipeline(pipeline);
-            vk::cmdDraw(3);
+            vk::cmdDraw(6);
             vk::cmdEndPresent();
             vk::cmdEnd();
             vk::cmdNext();
@@ -74,6 +88,18 @@ auto Engine::Execute() -> void
 
         Window::Update();
         vk::acquire();
+
+        camera.update();
+
+        projection = glm::perspective(glm::radians(70.f), 1280.f / 720.f, 0.5f, 1024.f);
+        view = camera.getView();
+
+        auto projView{ projection * view };
+        uniformBuffer.writeData(&projView);
+        
+        f32 colors[] = { sinf((f32)Window::GetTime() * 10.f) * 0.5f + 0.5f, cosf((f32)Window::GetTime()) * 0.5f + 0.5f, sinf((f32)Window::GetTime()) * 0.5f + 0.5f };
+        colorBuffer.writeData(colors);
+
         vk::present();
     }
     vk::waitIdle();

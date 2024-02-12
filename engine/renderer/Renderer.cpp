@@ -82,7 +82,8 @@ namespace vk
         u32                      maxImageIndex;
     };
 
-    auto static g_context{ Context() };
+    auto static g_context      { Context() };
+    auto static g_presentThread{ Thread() };
 
     Image::~Image()
     {
@@ -157,7 +158,7 @@ namespace vk
         if (memoryType & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
         {
             memcpy(mappedData, data, size);
-            vmaFlushAllocation(g_context.allocator, allocation, 0, size);
+            vmaFlushAllocation(g_context.allocator, allocation, 0, ~0ull);
         }
     }
 
@@ -212,6 +213,7 @@ namespace vk
 
         vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], false, ~0ull));
         vkCheck(vkResetFences(g_context.device, 1, &g_context.fences[g_context.frameIndex]));
+        g_presentThread.wait();
 
         auto result{ vkAcquireNextImageKHR(
             g_context.device,
@@ -251,35 +253,42 @@ namespace vk
         submitInfo.pCommandBuffers = &g_context.commandBuffers[g_context.imageIndex];
         vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, g_context.fences[g_context.frameIndex]));
 
-        VkPresentInfoKHR presentInfo;
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.pNext = nullptr;
-        presentInfo.pImageIndices = &g_context.imageIndex;
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = &g_context.swapchain;
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
-        presentInfo.pResults = nullptr;
-        auto result{ vkQueuePresentKHR(g_context.graphicsQueue.queue, &presentInfo) };
-
-        switch (result)
+        g_presentThread.enqueue([]
         {
-        case VK_SUCCESS:
-            break;
-        case VK_SUBOPTIMAL_KHR:
-        case VK_ERROR_OUT_OF_DATE_KHR:
-            g_context.recreateSwapchain();
-            break;
-        default:
-            vkCheck(result);
-            break;
-        }
+            auto frameIndex = g_context.frameIndex;
+            auto imageIndex = g_context.imageIndex;
 
-        g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
+            g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
+
+            VkPresentInfoKHR presentInfo;
+            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            presentInfo.pNext = nullptr;
+            presentInfo.pImageIndices = &imageIndex;
+            presentInfo.swapchainCount = 1;
+            presentInfo.pSwapchains = &g_context.swapchain;
+            presentInfo.waitSemaphoreCount = 1;
+            presentInfo.pWaitSemaphores = &g_context.presentSemaphores[frameIndex];
+            presentInfo.pResults = nullptr;
+            auto result{ vkQueuePresentKHR(g_context.graphicsQueue.queue, &presentInfo) };
+
+            switch (result)
+            {
+            case VK_SUCCESS:
+                break;
+            case VK_SUBOPTIMAL_KHR:
+            case VK_ERROR_OUT_OF_DATE_KHR:
+                g_context.recreateSwapchain();
+                break;
+            default:
+                vkCheck(result);
+                break;
+            }
+        });        
     }
 
     auto waitIdle() -> void
     {
+        g_presentThread.wait();
         if (g_context.device) vkDeviceWaitIdle(g_context.device);
     }
 
@@ -468,6 +477,7 @@ namespace vk
         if (!config.descriptors.empty())
         {
             std::vector<VkDescriptorSetLayoutBinding> bindings(config.descriptors.size());
+            std::vector<VkDescriptorBindingFlags> bindingFlags(config.descriptors.size());
             std::vector<VkWriteDescriptorSet> writes; writes.reserve(config.descriptors.size());
             std::deque<VkDescriptorBufferInfo> bufferInfos;
 
@@ -480,22 +490,18 @@ namespace vk
                 bindings[i].descriptorType = static_cast<VkDescriptorType>(descriptor.descriptorType);
                 bindings[i].pImmutableSamplers = nullptr;
                 bindings[i].stageFlags = descriptor.shaderStage;
-
-                if (!descriptor.pBuffer)
-                {
-                    break;
-                }
-
-                bufferInfos.push_back(VkDescriptorBufferInfo{
-                    .buffer = descriptor.pBuffer->handle,
-                    .offset = 0,
-                    .range = ~0ULL
-                });
+                bindingFlags[i] = 0;
             }
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo setLayoutBindingFlags;
+            setLayoutBindingFlags.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+            setLayoutBindingFlags.pNext = nullptr;
+            setLayoutBindingFlags.bindingCount = static_cast<u32>(bindingFlags.size());
+            setLayoutBindingFlags.pBindingFlags = bindingFlags.data();
 
             VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo;
             descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-            descriptorSetLayoutCreateInfo.pNext = nullptr;
+            descriptorSetLayoutCreateInfo.pNext = &setLayoutBindingFlags;
             descriptorSetLayoutCreateInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
             descriptorSetLayoutCreateInfo.bindingCount = static_cast<u32>(bindings.size());
             descriptorSetLayoutCreateInfo.pBindings = bindings.data();
@@ -512,6 +518,17 @@ namespace vk
             for (auto i{ u32{} }; i < config.descriptors.size(); ++i)
             {
                 auto const& descriptor{ config.descriptors[i] };
+
+                if (!descriptor.pBuffer)
+                {
+                    continue;
+                }
+
+                bufferInfos.push_back(VkDescriptorBufferInfo{
+                    .buffer = descriptor.pBuffer->handle,
+                    .offset = 0,
+                    .range = ~0ULL
+                });
 
                 VkWriteDescriptorSet descriptorWrite;
                 descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -589,7 +606,7 @@ namespace vk
         VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
         rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE;
         rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_LINE;
+        rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizationStateCreateInfo.lineWidth = 1.0f;
         rasterizationStateCreateInfo.depthClampEnable = false;
 

@@ -168,10 +168,10 @@ namespace vk
 
     struct PipelineDescriptor
     {
-        Buffer* pBuffer;
+        u32 binding;
         ShaderStageFlags shaderStage;
         DescriptorType descriptorType;
-        u32 binding;
+        Buffer* pBuffer;
     };
 
     struct Pipeline
