@@ -14,6 +14,14 @@ auto Engine::Init() -> void
 
 auto Engine::Execute() -> void
 {
+    vk::Buffer positionBuffer;
+    vk::Buffer indexBuffer;
+    vk::Buffer uniformBuffer;
+    vk::Buffer colorBuffer;
+
+    Camera camera;
+    camera.position = { 0.f, 0.f, -3.f };
+    camera.setProjection(glm::radians(70.f), 1280.f / 720.f, 0.1f, 1024.f);
 
     f32 vertices[] = {
         -0.5f, -0.5f, 0.0f,
@@ -23,21 +31,14 @@ auto Engine::Execute() -> void
     };
 
     u32 indices[] = { 0, 1, 2, 0, 2, 3 };
-    glm::mat4 projection;
-    glm::mat4 view;
-    Camera camera;
-    camera.position = { 0.f, 0.f, 3.f };
 
-    vk::Buffer positionBuffer;
-    vk::Buffer indexBuffer;
-    vk::Buffer uniformBuffer;
-    vk::Buffer colorBuffer;
-    positionBuffer.allocate(sizeof(vertices), vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    positionBuffer.allocate(sizeof(vertices),  vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    indexBuffer.allocate   (sizeof(indices),   vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    uniformBuffer.allocate (sizeof(glm::mat4), vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
+    colorBuffer.allocate   (sizeof(f32) * 3,   vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
+    
     positionBuffer.writeData(vertices);
-    indexBuffer.allocate(sizeof(indices), vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
     indexBuffer.writeData(indices);
-    uniformBuffer.allocate(sizeof(glm::mat4), vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
-    colorBuffer.allocate(sizeof(f32) * 3, vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
 
     auto pipeline{ vk::createPipeline(vk::PipelineConfig{
         .bindPoint = vk::PipelineBindPoint::eGraphics,
@@ -67,9 +68,12 @@ auto Engine::Execute() -> void
             vk::cmdNext();
         }
     }};
-
     recordCommands();
-    vk::onResize(recordCommands);
+
+    vk::onResize([&]() -> void
+    {
+        recordCommands();
+    });
 
     auto previousTime{ Window::GetTime() };
     auto frameCount{ u32{} };
@@ -91,10 +95,7 @@ auto Engine::Execute() -> void
 
         camera.update();
 
-        projection = glm::perspective(glm::radians(70.f), 1280.f / 720.f, 0.5f, 1024.f);
-        view = camera.getView();
-
-        auto projView{ projection * view };
+        auto projView{ camera.projection * camera.view };
         uniformBuffer.writeData(&projView);
         
         f32 colors[] = { sinf((f32)Window::GetTime() * 10.f) * 0.5f + 0.5f, cosf((f32)Window::GetTime()) * 0.5f + 0.5f, sinf((f32)Window::GetTime()) * 0.5f + 0.5f };

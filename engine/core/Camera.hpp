@@ -12,63 +12,82 @@ class Camera
 public:
     auto update() -> void
     {
-        auto const v{ glm::mat4_cast(orientation) };
+		static auto showCursor{ bool{true} };
 
-        auto const forward{ -glm::vec3(v[0][2], v[1][2], v[2][2]) };
-		auto const right  {  glm::vec3(v[0][0], v[1][0], v[2][0]) };
-		auto const up     {  glm::cross(right, forward)           };
+		auto velocity{ glm::vec3{} };
+		auto speed{ f32{5.f} };
 
-        auto accel{ glm::vec3{} };
-		auto sprint{ bool{} };
+		if (Window::GetKey(SDL_SCANCODE_W)) velocity -= front;
+		if (Window::GetKey(SDL_SCANCODE_S)) velocity += front;
+		if (Window::GetKey(SDL_SCANCODE_D)) velocity += right;
+		if (Window::GetKey(SDL_SCANCODE_A)) velocity -= right;
+		if (Window::GetKey(SDL_SCANCODE_E)) velocity.y += 1.f;
+		if (Window::GetKey(SDL_SCANCODE_Q)) velocity.y -= 1.f;
+		if (Window::GetKey(SDL_SCANCODE_LSHIFT)) speed = 10.f;
 
-        if (Window::IsKeyPressed(GLFW_KEY_W)) accel += forward;
-		if (Window::IsKeyPressed(GLFW_KEY_S)) accel -= forward;
-		if (Window::IsKeyPressed(GLFW_KEY_A)) accel -= right;
-		if (Window::IsKeyPressed(GLFW_KEY_D)) accel += right;
-		if (Window::IsKeyPressed(GLFW_KEY_E)) accel += up;
-		if (Window::IsKeyPressed(GLFW_KEY_Q)) accel -= up;
-
-		if (Window::IsKeyPressed(GLFW_KEY_LEFT_SHIFT))
+		if (velocity != glm::vec3{})
 		{
-			accel *= fastCoef;
-			sprint = true;
+			position += normalize(velocity) * Window::GetDeltaTime() * speed;
 		}
 
-		if (accel == glm::vec3(0))
+		if (showCursor)
 		{
-			moveSpeed -= moveSpeed * std::min((1.0f / damping) * static_cast<f32>(Window::GetDelta()), 1.0f);
-		}
-		else
-		{
-			moveSpeed += accel * acceleration * static_cast<f32>(Window::GetDelta());
-			const auto limit{ sprint ? maxSpeed * fastCoef : maxSpeed };
-
-			if (glm::length(moveSpeed) > limit)
-            {
-                moveSpeed = glm::normalize(moveSpeed) * limit;
-            }
+			yawPitch.x = glm::mod(yawPitch.x - Window::GetCursorOffsetX() * 0.1f, 360.f);
+			yawPitch.y += Window::GetCursorOffsetY() * 0.1f;
 		}
 
-		position += moveSpeed * static_cast<f32>(Window::GetDelta());
+		if (yawPitch.y >  89.9f) yawPitch.y =  89.9f;
+    	if (yawPitch.y < -89.9f) yawPitch.y = -89.9f;
+
+		front = glm::normalize(glm::vec3{
+				std::cos(glm::radians(yawPitch.x)) * std::cos(glm::radians(yawPitch.y)),
+				std::sin(glm::radians(yawPitch.y)),
+				std::sin(glm::radians(yawPitch.x)) * std::cos(glm::radians(yawPitch.y))
+			}
+		);
+		right = glm::normalize(glm::cross(front, { 0.f, 1.f, 0.f }));
+		up    = glm::normalize(glm::cross(right, front));
+
+		this->setView(front);
     }
 
-    auto getView() -> glm::mat4
-    {
-        auto const t{ glm::translate(glm::mat4(1.0f), -position) };
-		auto const r{ glm::mat4_cast(orientation) };
-		return r * t;
-    }
+	auto setProjection(f32 fovY, f32 aspect, f32 near, f32 far) -> void
+	{
+		auto const thf{ static_cast<f32>(std::tan(fovY / 2.f)) };
+		projection = { glm::mat4{} };
+		projection[0][0] = 1.f / (aspect * thf);
+		projection[1][1] = 1.f / (thf);
+		projection[2][2] = far / (far - near);
+		projection[2][3] = 1.f;
+		projection[3][2] = -(far * near) / (far - near);
+	}
+
+	auto setView(glm::vec3 const& direction) -> void
+	{
+		auto const w{ glm::normalize(direction) };
+		auto const u{ glm::normalize(cross(w, { 0.f, 1.f, 0.f })) };
+		auto const v{ glm::cross(u, w) };
+		view = { glm::mat4{1.f} };
+		view[0][0] = u.x;
+		view[1][0] = u.y;
+		view[2][0] = u.z;
+		view[0][1] = v.x;
+		view[1][1] = v.y;
+		view[2][1] = v.z;
+		view[0][2] = -w.x;
+		view[1][2] = -w.y;
+		view[2][2] = -w.z;
+		view[3][0] = -glm::dot(u, position);
+		view[3][1] = -glm::dot(v, position);
+    	view[3][2] =  glm::dot(w, position);
+	}
 
 public:
-	f32 acceleration{ 150.f };
-	f32 maxSpeed    { 10.0f };
-	f32 fastCoef    { 10.0f };
-    f32 mouseSpeed  {  4.0f };
-	f32 damping     {  0.1f };
-
-public:
-    glm::quat orientation{ glm::quat{ glm::vec3{} }  };
-    glm::vec3 up         { glm::vec3{ 0.f, 1.f, 0.f} };
-    glm::vec3 position   { glm::vec3{}               };
-    glm::vec3 moveSpeed  { glm::vec3{}               };
+	glm::mat4 projection{ glm::mat4{1.0f} };
+	glm::mat4 view		{ glm::mat4{1.0f} };
+    glm::vec3 position  { glm::vec3{0.0f} };
+    glm::vec3 front  	{ glm::vec3{0.0f} };
+    glm::vec3 right  	{ glm::vec3{0.0f} };
+    glm::vec3 up  	 	{ glm::vec3{0.0f} };
+	glm::vec2 yawPitch	{ glm::vec2{0.0f} };
 };

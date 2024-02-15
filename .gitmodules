@@ -1,6 +1,3 @@
-[submodule "vendor/glfw"]
-	path = vendor/glfw
-	url = https://github.com/glfw/glfw.git
 [submodule "vendor/volk"]
 	path = vendor/volk
 	url = https://github.com/zeux/volk.git
@@ -14,3 +11,6 @@
 	path = vendor/imgui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
+[submodule "vendor/SDL"]
+	path = vendor/SDL
+	url = https://github.com/libsdl-org/SDL.git

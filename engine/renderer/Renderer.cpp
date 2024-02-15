@@ -3,7 +3,7 @@
 #include <aixlog.hpp>
 #include <volk.h>
 #include <vk_mem_alloc.h>
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL_vulkan.h>
 #include <vector>
 #include <deque>
 #include <memory>
@@ -82,8 +82,7 @@ namespace vk
         u32                      maxImageIndex;
     };
 
-    auto static g_context      { Context() };
-    auto static g_presentThread{ Thread() };
+    auto static g_context{ Context() };
 
     Image::~Image()
     {
@@ -213,7 +212,6 @@ namespace vk
 
         vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], false, ~0ull));
         vkCheck(vkResetFences(g_context.device, 1, &g_context.fences[g_context.frameIndex]));
-        g_presentThread.wait();
 
         auto result{ vkAcquireNextImageKHR(
             g_context.device,
@@ -253,42 +251,35 @@ namespace vk
         submitInfo.pCommandBuffers = &g_context.commandBuffers[g_context.imageIndex];
         vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, g_context.fences[g_context.frameIndex]));
 
-        g_presentThread.enqueue([]
+        VkPresentInfoKHR presentInfo;
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.pNext = nullptr;
+        presentInfo.pImageIndices = &g_context.imageIndex;
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &g_context.swapchain;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
+        presentInfo.pResults = nullptr;
+        auto result{ vkQueuePresentKHR(g_context.graphicsQueue.queue, &presentInfo) };
+
+        switch (result)
         {
-            auto frameIndex = g_context.frameIndex;
-            auto imageIndex = g_context.imageIndex;
+        case VK_SUCCESS:
+            break;
+        case VK_SUBOPTIMAL_KHR:
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            g_context.recreateSwapchain();
+            break;
+        default:
+            vkCheck(result);
+            break;
+        } 
 
-            g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
-
-            VkPresentInfoKHR presentInfo;
-            presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-            presentInfo.pNext = nullptr;
-            presentInfo.pImageIndices = &imageIndex;
-            presentInfo.swapchainCount = 1;
-            presentInfo.pSwapchains = &g_context.swapchain;
-            presentInfo.waitSemaphoreCount = 1;
-            presentInfo.pWaitSemaphores = &g_context.presentSemaphores[frameIndex];
-            presentInfo.pResults = nullptr;
-            auto result{ vkQueuePresentKHR(g_context.graphicsQueue.queue, &presentInfo) };
-
-            switch (result)
-            {
-            case VK_SUCCESS:
-                break;
-            case VK_SUBOPTIMAL_KHR:
-            case VK_ERROR_OUT_OF_DATE_KHR:
-                g_context.recreateSwapchain();
-                break;
-            default:
-                vkCheck(result);
-                break;
-            }
-        });        
+        g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
     }
 
     auto waitIdle() -> void
     {
-        g_presentThread.wait();
         if (g_context.device) vkDeviceWaitIdle(g_context.device);
     }
 
@@ -696,7 +687,7 @@ namespace vk
         vkCheck(volkInitialize());
 
         u32 extensionCount;
-        auto extensionNames{ glfwGetRequiredInstanceExtensions(&extensionCount) };
+        auto extensionNames{ SDL_Vulkan_GetInstanceExtensions(&extensionCount) };
 
         std::vector<char const*> extensions(extensionNames, extensionNames + extensionCount);
         std::vector<char const*> layers;
@@ -759,7 +750,7 @@ namespace vk
             LOG(INFO, "Vulkan Context") << "Enabled validation layers\n";
         }
 
-        vkCheck(glfwCreateWindowSurface(instance, (GLFWwindow*)Window::GetHandle(), nullptr, &surface));
+        SDL_Vulkan_CreateSurface(const_cast<SDL_Window*>(Window::GetHandle()), instance, nullptr, &surface);
 
         LOG(INFO, "Vulkan Context") << "Created instance\n";
     }
@@ -807,9 +798,12 @@ namespace vk
 
         for (u32 i = 0; i < propertyCount; ++i)
         {
+            auto presentSupport{ VkBool32{false} };
+            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
+
             if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT &&
                 properties[i].queueFlags & VK_QUEUE_COMPUTE_BIT &&
-                glfwGetPhysicalDevicePresentationSupport(instance, physicalDevice, i))
+                presentSupport)
             {
                 graphicsQueue.family = i;
                 graphicsQueue.index = 0;
