@@ -23,7 +23,7 @@ public:
 		if (Window::GetKey(SDL_SCANCODE_A)) velocity -= right;
 		if (Window::GetKey(SDL_SCANCODE_E)) velocity.y += 1.f;
 		if (Window::GetKey(SDL_SCANCODE_Q)) velocity.y -= 1.f;
-		if (Window::GetKey(SDL_SCANCODE_LSHIFT)) speed = 10.f;
+		if (Window::GetKey(SDL_SCANCODE_LSHIFT)) speed = 15.f;
 
 		if (velocity != glm::vec3{})
 		{

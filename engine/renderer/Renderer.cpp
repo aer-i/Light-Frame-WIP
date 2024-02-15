@@ -319,7 +319,7 @@ namespace vk
         colorAttachment.imageView = image.handleView;
         colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         colorAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
         VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
