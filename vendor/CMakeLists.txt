@@ -16,6 +16,7 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/VulkanMemoryAllocator)
 target_include_directories(LightFrame PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/imgui/
     ${CMAKE_CURRENT_SOURCE_DIR}/aixlog/
+    ${CMAKE_CURRENT_SOURCE_DIR}/stb/
     ${Vulkan_INCLUDE_DIR}/
 )
 

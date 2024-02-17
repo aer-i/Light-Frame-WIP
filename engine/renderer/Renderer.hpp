@@ -1,6 +1,7 @@
 #pragma once
 #include "Types.hpp"
 #include "ArrayProxy.hpp"
+#include <glm/glm.hpp>
 #include <string>
 #include <functional>
 
@@ -25,30 +26,30 @@ namespace vk
 
     namespace ImageUsage
     {
-        enum 
+        enum : flags
         {
             eTransferSrc = 0x00000001,
             eTransferDst = 0x00000002,
             eSampled = 0x00000004,
             eStorage = 0x00000008,
             eColorAttachment = 0x00000010,
-            eDepthAttachment = 0x00000020,
+            eDepthAttachment = 0x00000020
         };
     }
 
     namespace Aspect
     {
-        enum
+        enum : flags
         {
             eColor = 1,
             eDepth = 2,
-            eStencil = 4,
+            eStencil = 4
         };
     }
 
     namespace ShaderStage
     {
-        enum
+        enum : flags
         {
             eVertex = 0x00000001,
             eGeometry = 0x00000008,
@@ -59,7 +60,7 @@ namespace vk
 
     namespace BufferUsage
     {
-        enum
+        enum : flags
         {
             eTransferSrc = 0x00000001,
             eTransferDst = 0x00000002,
@@ -131,6 +132,9 @@ namespace vk
         ~Image();
 
         auto loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void;
+        auto allocate(glm::uvec2 size, ImageUsageFlags usage) -> void;
+        auto writeToImage(void const* data, size_t dataSize) -> void;
+        auto loadFromFile2D(std::string_view path) -> void;
 
         VkImage handle;
         VkImageView handleView;
@@ -139,8 +143,7 @@ namespace vk
         AspectFlags aspect;
         ImageLayout layout;
         Format format;
-        u32 width;
-        u32 height;
+        glm::uvec2 size;
         u32 layerCount;
     };
 
@@ -174,12 +177,16 @@ namespace vk
         Buffer* pBuffer;
     };
 
-    struct Pipeline
+    class Pipeline
     {
+    public:
         ~Pipeline();
+
+        auto writeImage(Image* pImage, u32 arrayElement, DescriptorType type) -> void;
 
         u32               handleIndex;
         u32               descriptor;
+        u32               imagesBinding;
         PipelineBindPoint bindPoint;
     };
 
@@ -208,6 +215,9 @@ namespace vk
     auto cmdDraw(u32 vertexCount)                        -> void;
     auto cmdNext()                                       -> void;
     auto onResize(std::function<void()> resizeCallback)  -> void;
+    auto getWidth()                                      -> f32;
+    auto getHeight()                                     -> f32;
+    auto getAspectRatio()                                -> f32;
     auto createPipeline(PipelineConfig const& config)    -> Pipeline;
     auto getCommandBufferCount()                         -> u32;
 }

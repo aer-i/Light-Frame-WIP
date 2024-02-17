@@ -15,13 +15,16 @@ auto Engine::Init() -> void
 auto Engine::Execute() -> void
 {
     vk::Buffer positionBuffer;
+    vk::Buffer uvsBuffer;
     vk::Buffer indexBuffer;
     vk::Buffer uniformBuffer;
-    vk::Buffer colorBuffer;
+    vk::Image  texture;
 
     Camera camera;
+    camera.yawPitch.x = -90.f;
     camera.position = { 0.f, 0.f, -3.f };
-    camera.setProjection(glm::radians(70.f), 1280.f / 720.f, 0.1f, 1024.f);
+    camera.setProjection(glm::radians(70.f), vk::getAspectRatio(), 0.1f, 1024.f);
+    camera.update();
 
     f32 vertices[] = {
         -0.5f, -0.5f, 0.0f,
@@ -30,15 +33,25 @@ auto Engine::Execute() -> void
         -0.5f,  0.5f, 0.0f
     };
 
+    f32 uvs[] = {
+        1.f, 0.f,
+        0.f, 0.f,
+        0.f, 1.f,
+        1.f, 1.f
+    };
+
     u32 indices[] = { 0, 1, 2, 0, 2, 3 };
 
-    positionBuffer.allocate(sizeof(vertices),  vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
-    indexBuffer.allocate   (sizeof(indices),   vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost);
+    positionBuffer.allocate(sizeof(vertices),  vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
+    uvsBuffer.allocate     (sizeof(uvs),       vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
+    indexBuffer.allocate   (sizeof(indices),   vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
     uniformBuffer.allocate (sizeof(glm::mat4), vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
-    colorBuffer.allocate   (sizeof(f32) * 3,   vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
     
     positionBuffer.writeData(vertices);
+    uvsBuffer.writeData(uvs);
     indexBuffer.writeData(indices);
+
+    texture.loadFromFile2D("rock.png");
 
     auto pipeline{ vk::createPipeline(vk::PipelineConfig{
         .bindPoint = vk::PipelineBindPoint::eGraphics,
@@ -47,13 +60,15 @@ auto Engine::Execute() -> void
             { .stage = vk::ShaderStage::eFragment, .filepath = "shaders/main.frag.spv"}
         },
         .descriptors = {
-            { .binding = 0, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBuffer = &indexBuffer    },
-            { .binding = 1, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBuffer = &positionBuffer },
-            { .binding = 2, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBuffer = &uniformBuffer  },
-            { .binding = 3, .shaderStage = vk::ShaderStage::eVertex, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBuffer = &colorBuffer    }
+            { .binding = 0, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eStorageBuffer,        .pBuffer = &indexBuffer    },
+            { .binding = 1, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eStorageBuffer,        .pBuffer = &positionBuffer },
+            { .binding = 2, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eStorageBuffer,        .pBuffer = &uvsBuffer      },
+            { .binding = 3, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eUniformBuffer,        .pBuffer = &uniformBuffer  },
+            { .binding = 4, .shaderStage = vk::ShaderStage::eFragment, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pBuffer = nullptr         }
         }
     })};
 
+    pipeline.writeImage(&texture, 0, vk::DescriptorType::eCombinedImageSampler);
 
     auto recordCommands{ [&]() -> void
     {
@@ -73,10 +88,12 @@ auto Engine::Execute() -> void
     vk::onResize([&]() -> void
     {
         recordCommands();
+        camera.setProjection(glm::radians(70.f), vk::getAspectRatio(), 0.1f, 1024.f);
     });
 
     auto previousTime{ Window::GetTime() };
     auto frameCount{ u32{} };
+    auto relativeMouseMode{ bool{} };
 
     while (Window::Available())
     {
@@ -90,16 +107,22 @@ auto Engine::Execute() -> void
             previousTime = currentTime;
         }
 
+        if (Window::GetKeyDown(key::eEscape))
+        {
+            relativeMouseMode = !relativeMouseMode;
+            Window::SetRelativeMouseMode(relativeMouseMode);
+        }
+
         Window::Update();
         vk::acquire();
 
-        camera.update();
+        if (Window::GetRelativeMouseMode())
+        {
+            camera.update();
+        }
 
         auto projView{ camera.projection * camera.view };
         uniformBuffer.writeData(&projView);
-        
-        f32 colors[] = { sinf((f32)Window::GetTime() * 10.f) * 0.5f + 0.5f, cosf((f32)Window::GetTime()) * 0.5f + 0.5f, sinf((f32)Window::GetTime()) * 0.5f + 0.5f };
-        colorBuffer.writeData(colors);
 
         vk::present();
     }

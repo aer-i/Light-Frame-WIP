@@ -1,28 +1,13 @@
 #version 460
 
-layout(std430, binding = 0) restrict readonly buffer IndexBuffer
-{
-    uint indices[];
-};
+layout(std430, binding = 0) restrict readonly buffer  IndexBuffer   { uint indices[];    };
+layout(std430, binding = 1) restrict readonly buffer  PositionBuffer{ float positions[]; };
+layout(std430, binding = 2) restrict readonly buffer  UvBuffer      { float uvs[];       };
+layout(        binding = 3) restrict readonly uniform UniformBuffer { mat4 projView;     };
 
-layout(std430, binding = 1) restrict readonly buffer PositionBuffer
-{
-    float positions[];
-};
+layout(location = 0) out vec2 outUv;
 
-layout(binding = 2) restrict readonly uniform UniformBuffer
-{
-    mat4 projView;
-};
-
-layout(binding = 3) restrict readonly uniform ColorBuffer
-{
-    float r, g, b;
-};
-
-layout(location = 0) out vec3 outColor;
-
-void main(void)
+void main()
 {
     uint id = indices[gl_VertexIndex];
 
@@ -32,6 +17,10 @@ void main(void)
         positions[id * 3 + 2]
     );
 
-    outColor = vec3(r, g, b);
+    outUv = vec2(
+        uvs[id * 2 + 0],
+        uvs[id * 2 + 1]
+    );
+
     gl_Position = projView * vec4(vPos, 1.0);
 }

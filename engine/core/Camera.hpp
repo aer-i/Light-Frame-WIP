@@ -17,13 +17,13 @@ public:
 		auto velocity{ glm::vec3{} };
 		auto speed{ f32{5.f} };
 
-		if (Window::GetKey(SDL_SCANCODE_W)) velocity -= front;
-		if (Window::GetKey(SDL_SCANCODE_S)) velocity += front;
-		if (Window::GetKey(SDL_SCANCODE_D)) velocity += right;
-		if (Window::GetKey(SDL_SCANCODE_A)) velocity -= right;
-		if (Window::GetKey(SDL_SCANCODE_E)) velocity.y += 1.f;
-		if (Window::GetKey(SDL_SCANCODE_Q)) velocity.y -= 1.f;
-		if (Window::GetKey(SDL_SCANCODE_LSHIFT)) speed = 15.f;
+		if (Window::GetKey(key::eW)) velocity -= front;
+		if (Window::GetKey(key::eS)) velocity += front;
+		if (Window::GetKey(key::eD)) velocity += right;
+		if (Window::GetKey(key::eA)) velocity -= right;
+		if (Window::GetKey(key::eE)) velocity.y += 1.f;
+		if (Window::GetKey(key::eQ)) velocity.y -= 1.f;
+		if (Window::GetKey(key::eLeftShift)) speed = 15.f;
 
 		if (velocity != glm::vec3{})
 		{

@@ -1,6 +1,7 @@
 #include "Window.hpp"
 #include <stdexcept>
 #include <chrono>
+#include <SDL3/SDL.h>
 #include <aixlog.hpp>
 
 auto Window::Create() -> void
@@ -23,6 +24,7 @@ auto Window::Create() -> void
     }
     
     SDL_SetWindowPosition(m_handle, m_pos.x, m_pos.y);
+    m_keyboardState = const_cast<u8*>(SDL_GetKeyboardState(nullptr));
 
     LOG(INFO, "Window") << "Created window\n";
 }
@@ -36,12 +38,13 @@ auto Window::Teardown() -> void
 
 auto Window::Update() -> void
 {
-    auto static previousTime{ GetTime() };
-    auto        currentTime { GetTime() };
+    auto static event       { SDL_Event{} };
+    auto static previousTime{ GetTime()   };
+    auto        currentTime { GetTime()   };
 
-    while (SDL_PollEvent(&m_event))
+    while (SDL_PollEvent(&event))
     {
-        switch (m_event.type)
+        switch (event.type)
         {
         case SDL_EVENT_QUIT:
             m_available = false;
@@ -49,7 +52,7 @@ auto Window::Update() -> void
         case SDL_EVENT_WINDOW_MINIMIZED:
         case SDL_EVENT_WINDOW_RESIZED:
         case SDL_EVENT_WINDOW_RESTORED:
-            SDL_GetWindowSize(m_handle, (i32*)&m_size.x, (i32*)&m_size.y);
+            SDL_GetWindowSize(m_handle, &m_size.x, &m_size.y);
             break;
         case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&m_cursorPos.x, &m_cursorPos.y);
@@ -66,6 +69,22 @@ auto Window::Update() -> void
     previousTime = currentTime;
 
     m_keyboardState = const_cast<u8*>(SDL_GetKeyboardState(nullptr));
+}
+
+auto Window::SetTitle(std::string_view title) -> void
+{
+    m_title = title;
+    SDL_SetWindowTitle(m_handle, m_title.c_str());
+}
+
+auto Window::SetRelativeMouseMode(bool enable) -> void
+{
+    SDL_SetRelativeMouseMode(enable);
+}
+
+auto Window::GetRelativeMouseMode() -> bool
+{
+    return static_cast<bool>(SDL_GetRelativeMouseMode());
 }
 
 auto Window::GetKey(i32 key) -> bool
@@ -127,10 +146,4 @@ auto Window::GetTime() -> f64
     auto static startTime{ std::chrono::high_resolution_clock::now() };
     auto now{ std::chrono::high_resolution_clock::now() };
     return std::chrono::duration_cast<std::chrono::duration<double>>(now - startTime).count();
-}
-
-auto Window::SetTitle(std::string_view title) -> void
-{
-    m_title = title;
-    SDL_SetWindowTitle(m_handle, m_title.c_str());
 }
