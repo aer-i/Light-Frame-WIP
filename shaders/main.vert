@@ -1,9 +1,9 @@
 #version 460
 
-layout(std430, binding = 0) restrict readonly buffer  IndexBuffer   { uint indices[];    };
+layout(std430, binding = 0) restrict readonly buffer  IndexBuffer   { uint  indices[];   };
 layout(std430, binding = 1) restrict readonly buffer  PositionBuffer{ float positions[]; };
 layout(std430, binding = 2) restrict readonly buffer  UvBuffer      { float uvs[];       };
-layout(        binding = 3) restrict readonly uniform UniformBuffer { mat4 projView;     };
+layout(        binding = 3) restrict readonly uniform UniformBuffer { mat4  projView;    };
 
 layout(location = 0) out vec2 outUv;
 

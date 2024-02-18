@@ -87,7 +87,6 @@ namespace vk
         ResizeCallback           onResize;
         u32                      imageIndex;
         u32                      frameIndex;
-        u32                      currentCmd;
         u32                      maxImageIndex;
     };
 
@@ -390,109 +389,9 @@ namespace vk
         vkUpdateDescriptorSets(g_context.device, 1, &write, 0, nullptr);
     }
 
-    auto init() -> void
+    auto Cmd::begin() -> void
     {
-        std::memset(&g_context, 0, sizeof(Context));
-        g_context.createInstance();
-        g_context.createPhysicalDevice();
-        g_context.createDevice();
-    }
-
-    auto teardown() -> void
-    {
-        g_context.teardown();
-    }
-
-    auto acquire() -> void
-    {
-        auto static previousWidth { g_context.extent.width  };
-        auto static previousHeight{ g_context.extent.height };
-
-        if (previousWidth  != Window::GetWidth() ||
-            previousHeight != Window::GetHeight())
-        {
-            g_context.recreateSwapchain();
-
-            previousWidth  = Window::GetWidth();
-            previousHeight = Window::GetHeight();
-        }
-
-        vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], false, ~0ull));
-        vkCheck(vkResetFences(g_context.device, 1, &g_context.fences[g_context.frameIndex]));
-
-        auto result{ vkAcquireNextImageKHR(
-            g_context.device,
-            g_context.swapchain,
-            ~0ull,
-            g_context.renderSemaphores[g_context.frameIndex],
-            nullptr,
-            &g_context.imageIndex
-        ) };
-
-        switch (result)
-        {
-        case VK_SUCCESS:
-        case VK_SUBOPTIMAL_KHR:
-            break;
-        case VK_ERROR_OUT_OF_DATE_KHR:
-            g_context.recreateSwapchain();
-        default:
-            vkCheck(result);
-            break;
-        }
-    }
-
-    auto present() -> void
-    {
-        VkPipelineStageFlags constexpr stage{ VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
-        VkSubmitInfo submitInfo;
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.pNext = nullptr;
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pWaitDstStageMask = &stage;
-        submitInfo.pWaitSemaphores = &g_context.renderSemaphores[g_context.frameIndex];
-        submitInfo.pSignalSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
-        submitInfo.pCommandBuffers = &g_context.commandBuffers[g_context.imageIndex];
-        vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, g_context.fences[g_context.frameIndex]));
-
-        VkPresentInfoKHR presentInfo;
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        presentInfo.pNext = nullptr;
-        presentInfo.pImageIndices = &g_context.imageIndex;
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = &g_context.swapchain;
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
-        presentInfo.pResults = nullptr;
-        auto result{ vkQueuePresentKHR(g_context.graphicsQueue.queue, &presentInfo) };
-
-        switch (result)
-        {
-        case VK_SUCCESS:
-            break;
-        case VK_SUBOPTIMAL_KHR:
-        case VK_ERROR_OUT_OF_DATE_KHR:
-            g_context.recreateSwapchain();
-            break;
-        default:
-            vkCheck(result);
-            break;
-        } 
-
-        g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
-    }
-
-    auto waitIdle() -> void
-    {
-        if (g_context.device) vkDeviceWaitIdle(g_context.device);
-    }
-
-    auto cmdBegin() -> void
-    {
-        vkCheck(vkResetCommandPool(g_context.device, g_context.commandPools[g_context.currentCmd], 0));
+        vkCheck(vkResetCommandPool(g_context.device, g_context.commandPools[m_index], 0));
 
         VkCommandBufferBeginInfo beginInfo;
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -500,27 +399,27 @@ namespace vk
         beginInfo.pNext = nullptr;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-        vkCheck(vkBeginCommandBuffer(g_context.commandBuffers[g_context.currentCmd], &beginInfo));
+        vkCheck(vkBeginCommandBuffer(g_context.commandBuffers[m_index], &beginInfo));
     }
 
-    auto cmdEnd() -> void
+    auto Cmd::end() -> void
     {
-        vkCheck(vkEndCommandBuffer(g_context.commandBuffers[g_context.currentCmd]));
+        vkCheck(vkEndCommandBuffer(g_context.commandBuffers[m_index]));
     }
 
-    auto cmdBeginPresent() -> void
+    auto Cmd::beginPresent() -> void
     {
-        cmdBarrier(g_context.swapchainImages[g_context.currentCmd], ImageLayout::eColorAttachment);
-        cmdBeginRendering(g_context.swapchainImages[g_context.currentCmd]);
+        barrier(g_context.swapchainImages[m_index], ImageLayout::eColorAttachment);
+        beginRendering(g_context.swapchainImages[m_index]);
     }
 
-    auto cmdEndPresent() -> void
+    auto Cmd::endPresent() -> void
     {
-        cmdEndRendering();
-        cmdBarrier(g_context.swapchainImages[g_context.currentCmd], ImageLayout::ePresent);
+        endRendering();
+        barrier(g_context.swapchainImages[m_index], ImageLayout::ePresent);
     }
 
-    auto cmdBeginRendering(Image const& image) -> void
+    auto Cmd::beginRendering(Image const& image) -> void
     {
         VkRenderingAttachmentInfo colorAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
         colorAttachment.imageView = image.handleView;
@@ -537,7 +436,7 @@ namespace vk
         renderingInfo.colorAttachmentCount = 1;
         renderingInfo.pColorAttachments = &colorAttachment;
 
-        vkCmdBeginRendering(g_context.commandBuffers[g_context.currentCmd], &renderingInfo);
+        vkCmdBeginRendering(g_context.commandBuffers[m_index], &renderingInfo);
 
         VkViewport viewport;
         viewport.minDepth = 0.f;
@@ -551,21 +450,24 @@ namespace vk
         scissor.offset = { };
         scissor.extent = { image.size.x, image.size.y };
 
-        vkCmdSetViewport(g_context.commandBuffers[g_context.currentCmd], 0, 1, &viewport);
-        vkCmdSetScissor(g_context.commandBuffers[g_context.currentCmd], 0, 1, &scissor);
+        vkCmdSetViewport(g_context.commandBuffers[m_index], 0, 1, &viewport);
+        vkCmdSetScissor(g_context.commandBuffers[m_index], 0, 1, &scissor);
     }
 
-    auto cmdEndRendering() -> void
+    auto Cmd::endRendering() -> void
     {
-        vkCmdEndRendering(g_context.commandBuffers[g_context.currentCmd]);
+        vkCmdEndRendering(g_context.commandBuffers[m_index]);
     }
 
-    auto cmdBarrier(Image& image, ImageLayout newLayout) -> void
+    auto Cmd::barrier(Image& image, ImageLayout newLayout) -> void
     {
+        auto oldLayout{ image.layout };
+        image.layout = newLayout;
+
         VkImageMemoryBarrier2 imageBarrier;
         imageBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         imageBarrier.pNext = nullptr;
-        imageBarrier.oldLayout = static_cast<VkImageLayout>(image.layout);
+        imageBarrier.oldLayout = static_cast<VkImageLayout>(oldLayout);
         imageBarrier.newLayout = static_cast<VkImageLayout>(newLayout);
         imageBarrier.subresourceRange.aspectMask = image.aspect;
         imageBarrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
@@ -576,7 +478,7 @@ namespace vk
         imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         imageBarrier.image = image.handle;
 
-        switch (image.layout)
+        switch (oldLayout)
         {
         case ImageLayout::eUndefined:
             imageBarrier.srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
@@ -622,15 +524,13 @@ namespace vk
         dependency.memoryBarrierCount = 0;
         dependency.imageMemoryBarrierCount = 1;
         dependency.pImageMemoryBarriers = &imageBarrier;
-        vkCmdPipelineBarrier2(g_context.commandBuffers[g_context.currentCmd], &dependency);
-
-        image.layout = newLayout;
+        vkCmdPipelineBarrier2(g_context.commandBuffers[m_index], &dependency);
     }
 
-    auto cmdBindPipeline(Pipeline& pipeline) -> void
+    auto Cmd::bindPipeline(Pipeline& pipeline) -> void
     {
         vkCmdBindPipeline(
-            g_context.commandBuffers[g_context.currentCmd],
+            g_context.commandBuffers[m_index],
             static_cast<VkPipelineBindPoint>(pipeline.bindPoint),
             g_context.pipelines[pipeline.handleIndex]
         );
@@ -638,28 +538,120 @@ namespace vk
         if (pipeline.descriptor != ~0u)
         {
             vkCmdBindDescriptorSets(
-                g_context.commandBuffers[g_context.currentCmd],
+                g_context.commandBuffers[m_index],
                 static_cast<VkPipelineBindPoint>(pipeline.bindPoint),
                 g_context.pipelineLayouts[pipeline.handleIndex],
                 0,
                 1,
                 &g_context.descriptors[pipeline.descriptor],
                 0,
-                 nullptr
+                nullptr
             );
         }
 
         g_context.currentPipeline = &pipeline;
     }
 
-    auto cmdDraw(u32 vertexCount) -> void
+    auto Cmd::draw(u32 vertexCount) -> void
     {
-        vkCmdDraw(g_context.commandBuffers[g_context.currentCmd], vertexCount, 1, 0, 0);
+        vkCmdDraw(g_context.commandBuffers[m_index], vertexCount, 1, 0, 0);
     }
 
-    auto cmdNext() -> void
+    auto init() -> void
     {
-        g_context.currentCmd = (g_context.currentCmd + 1) % g_context.maxImageIndex;
+        std::memset(&g_context, 0, sizeof(Context));
+        g_context.createInstance();
+        g_context.createPhysicalDevice();
+        g_context.createDevice();
+    }
+
+    auto teardown() -> void
+    {
+        g_context.teardown();
+    }
+
+    auto present() -> void
+    {
+        auto static previousWidth { g_context.extent.width  };
+        auto static previousHeight{ g_context.extent.height };
+
+        if (previousWidth  != Window::GetWidth() ||
+            previousHeight != Window::GetHeight())
+        {
+            g_context.recreateSwapchain();
+
+            previousWidth  = Window::GetWidth();
+            previousHeight = Window::GetHeight();
+        }
+
+        vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], false, ~0ull));
+        vkCheck(vkResetFences(g_context.device, 1, &g_context.fences[g_context.frameIndex]));
+
+        auto result{ vkAcquireNextImageKHR(
+            g_context.device,
+            g_context.swapchain,
+            ~0ull,
+            g_context.renderSemaphores[g_context.frameIndex],
+            nullptr,
+            &g_context.imageIndex
+        ) };
+
+        switch (result)
+        {
+        case VK_SUCCESS:
+        case VK_SUBOPTIMAL_KHR:
+            break;
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            g_context.recreateSwapchain();
+        default:
+            vkCheck(result);
+            break;
+        }
+
+        VkPipelineStageFlags constexpr stage{ VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+        VkSubmitInfo submitInfo;
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.pNext = nullptr;
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pWaitDstStageMask = &stage;
+        submitInfo.pWaitSemaphores = &g_context.renderSemaphores[g_context.frameIndex];
+        submitInfo.pSignalSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
+        submitInfo.pCommandBuffers = &g_context.commandBuffers[g_context.imageIndex];
+        vkCheck(vkQueueSubmit(g_context.graphicsQueue.queue, 1, &submitInfo, g_context.fences[g_context.frameIndex]));
+
+        VkPresentInfoKHR presentInfo;
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.pNext = nullptr;
+        presentInfo.pImageIndices = &g_context.imageIndex;
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &g_context.swapchain;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &g_context.presentSemaphores[g_context.frameIndex];
+        presentInfo.pResults = nullptr;
+        result = vkQueuePresentKHR(g_context.graphicsQueue.queue, &presentInfo);
+
+        switch (result)
+        {
+        case VK_SUCCESS:
+            break;
+        case VK_SUBOPTIMAL_KHR:
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            g_context.recreateSwapchain();
+            break;
+        default:
+            vkCheck(result);
+            break;
+        } 
+
+        g_context.frameIndex = (g_context.frameIndex + 1) % g_context.maxImageIndex;
+    }
+
+    auto waitIdle() -> void
+    {
+        if (g_context.device) vkDeviceWaitIdle(g_context.device);
     }
 
     auto createPipeline(PipelineConfig const& config) -> Pipeline

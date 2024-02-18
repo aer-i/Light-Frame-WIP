@@ -190,6 +190,28 @@ namespace vk
         PipelineBindPoint bindPoint;
     };
 
+    class Cmd
+    {
+    public:
+        Cmd(u32 index)
+            : m_index{ index }
+        {}
+        ~Cmd() = default;
+
+        auto begin()                                      -> void;
+        auto end()                                        -> void;
+        auto beginPresent()                               -> void;
+        auto endPresent()                                 -> void;
+        auto beginRendering(Image const& image)           -> void;
+        auto endRendering()                               -> void;
+        auto barrier(Image& image, ImageLayout newLayout) -> void;
+        auto bindPipeline(Pipeline& pipeline)             -> void;
+        auto draw(u32 vertexCount)                        -> void;
+
+    private:
+        u32 const m_index;
+    };
+
     struct PipelineConfig
     {
         PipelineBindPoint               bindPoint;
@@ -201,19 +223,8 @@ namespace vk
 
     auto init()                                          -> void;
     auto teardown()                                      -> void;
-    auto acquire()                                       -> void;
     auto present()                                       -> void;
     auto waitIdle()                                      -> void;
-    auto cmdBegin()                                      -> void;
-    auto cmdEnd()                                        -> void;
-    auto cmdBeginPresent()                               -> void;
-    auto cmdEndPresent()                                 -> void;
-    auto cmdBeginRendering(Image const& image)           -> void;
-    auto cmdEndRendering()                               -> void;
-    auto cmdBarrier(Image& image, ImageLayout newLayout) -> void;
-    auto cmdBindPipeline(Pipeline& pipeline)             -> void;
-    auto cmdDraw(u32 vertexCount)                        -> void;
-    auto cmdNext()                                       -> void;
     auto onResize(std::function<void()> resizeCallback)  -> void;
     auto getWidth()                                      -> f32;
     auto getHeight()                                     -> f32;

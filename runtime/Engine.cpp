@@ -70,18 +70,24 @@ auto Engine::Execute() -> void
 
     pipeline.writeImage(&texture, 0, vk::DescriptorType::eCombinedImageSampler);
 
+    auto threadPool{ ThreadPool{vk::getCommandBufferCount()} };
     auto recordCommands{ [&]() -> void
     {
         for (auto i{ vk::getCommandBufferCount() }; i--; )
         {
-            vk::cmdBegin();
-            vk::cmdBeginPresent();
-            vk::cmdBindPipeline(pipeline);
-            vk::cmdDraw(6);
-            vk::cmdEndPresent();
-            vk::cmdEnd();
-            vk::cmdNext();
+            threadPool.enqueue([i, &pipeline]
+            {
+                auto cmd{ vk::Cmd{i} };
+                cmd.begin();
+                cmd.beginPresent();
+                cmd.bindPipeline(pipeline);
+                cmd.draw(6);
+                cmd.endPresent();
+                cmd.end();
+            });
         }
+
+        threadPool.wait();
     }};
     recordCommands();
 
@@ -112,9 +118,8 @@ auto Engine::Execute() -> void
             relativeMouseMode = !relativeMouseMode;
             Window::SetRelativeMouseMode(relativeMouseMode);
         }
-
+        
         Window::Update();
-        vk::acquire();
 
         if (Window::GetRelativeMouseMode())
         {

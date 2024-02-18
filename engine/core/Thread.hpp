@@ -70,3 +70,33 @@ private:
     std::condition_variable m_conditionVariable;
     bool m_executing = true;
 };
+
+class ThreadPool
+{
+public:
+    ThreadPool() = delete;
+    ~ThreadPool() = default;
+
+    explicit ThreadPool(u32 threadCount = std::thread::hardware_concurrency())
+    {
+        m_threads = std::vector<Thread>(threadCount);
+    }
+
+    inline auto enqueue(std::function<void()>&& task) -> void
+    {
+        m_threads[m_currentThread].enqueue(std::move(task));
+        m_currentThread = (m_currentThread + 1) % m_threads.size();
+    }
+    
+    inline auto wait() -> void
+    {
+        for (auto& thread : m_threads)
+        {
+            thread.wait();
+        }
+    }
+
+private:
+    std::vector<Thread> m_threads;
+    u32 m_currentThread{};
+};
