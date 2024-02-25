@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <chrono>
 #include <SDL3/SDL.h>
+#include <backends/imgui_impl_sdl3.h>
 #include <aixlog.hpp>
 
 auto Window::Create() -> void
@@ -44,6 +45,11 @@ auto Window::Update() -> void
 
     while (SDL_PollEvent(&event))
     {
+        if (ImGui::GetCurrentContext())
+        {
+            ImGui_ImplSDL3_ProcessEvent(&event);
+        }
+
         switch (event.type)
         {
         case SDL_EVENT_QUIT:

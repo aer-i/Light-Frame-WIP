@@ -7,14 +7,9 @@
 
 struct VkImage_T;
 struct VkImageView_T;
-struct VkBuffer_T;
-struct VmaAllocation_T;
-struct VmaAllocationInfo;
 
 using VkImage = VkImage_T*;
-using VkBuffer = VkBuffer_T*;
 using VkImageView = VkImageView_T*;
-using VmaAllocation = VmaAllocation_T*;
 
 namespace vk
 {
@@ -72,6 +67,7 @@ namespace vk
 
     enum class Format : flags
     {
+        eR8_unorm = 9,
         eRGBA8_unorm = 37,
         eBGRA8_unorm = 44,
         eRG32_sfloat = 103,
@@ -108,6 +104,23 @@ namespace vk
         eCompute = 1
     };
 
+    enum class PipelineTopology : flags
+    {
+        ePoint = 0,
+        eLineList = 1,
+        eLineStrip = 2,
+        eTriangleList = 3,
+        eTriangleStrip = 4,
+        eTriangleFan = 5
+    };
+
+    enum class PipelineCullMode : flags
+    {
+        eNone = 0,
+        eFront = 0x00000001,
+        eBack = 0x00000002
+    };
+
     enum class MemoryType : flags
     {
         eHost = 0x0,
@@ -129,16 +142,15 @@ namespace vk
     {
     public:
         Image() = default;
-        ~Image();
+        ~Image() = default;
 
         auto loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void;
-        auto allocate(glm::uvec2 size, ImageUsageFlags usage) -> void;
-        auto writeToImage(void const* data, size_t dataSize) -> void;
+        auto allocate(glm::uvec2 size, ImageUsageFlags usage, Format format) -> void;
+        auto write(void const* data, size_t dataSize) -> void;
+        auto subwrite(void const* data, size_t dataSize, glm::ivec2 offset, glm::uvec2 size) -> void;
         auto loadFromFile2D(std::string_view path) -> void;
 
-        VkImage handle;
-        VkImageView handleView;
-        VmaAllocation allocation;
+        u32 handleIndex;
         ImageUsageFlags usage;
         AspectFlags aspect;
         ImageLayout layout;
@@ -150,23 +162,27 @@ namespace vk
     class Buffer
     {
     public:
-        Buffer() = default;
-        ~Buffer();
-
         auto allocate(u32 dataSize, BufferUsageFlags usage, MemoryType memory) -> void;
-        auto writeData(void const* data) -> void;
+        auto writeData(void const* data, size_t size = 0) -> void;
 
-        void* mappedData;
-        VkBuffer handle;
-        VmaAllocation allocation;
+        void* mappedData{ nullptr };
+        u32 handleIndex;
         u32 memoryType;
         u32 size;
+    };
+
+    struct DrawIndirectCommands
+    {
+        u32 vertexCount;
+        u32 instanceCount;
+        u32 firstVertex;
+        u32 firstInstance;
     };
 
     struct PipelineShaderStage
     {
         ShaderStageFlags stage;
-        std::string      filepath;
+        std::string      path;
     };
 
     struct PipelineDescriptor
@@ -175,15 +191,16 @@ namespace vk
         ShaderStageFlags shaderStage;
         DescriptorType descriptorType;
         Buffer* pBuffer;
+        size_t offset;
+        size_t size;
     };
 
     class Pipeline
     {
     public:
-        ~Pipeline();
-
         auto writeImage(Image* pImage, u32 arrayElement, DescriptorType type) -> void;
 
+    public:
         u32               handleIndex;
         u32               descriptor;
         u32               imagesBinding;
@@ -193,20 +210,20 @@ namespace vk
     class Cmd
     {
     public:
-        Cmd(u32 index)
-            : m_index{ index }
-        {}
+        Cmd(u32 index) : m_index{ index } {}
         ~Cmd() = default;
 
-        auto begin()                                      -> void;
-        auto end()                                        -> void;
-        auto beginPresent()                               -> void;
-        auto endPresent()                                 -> void;
-        auto beginRendering(Image const& image)           -> void;
-        auto endRendering()                               -> void;
-        auto barrier(Image& image, ImageLayout newLayout) -> void;
-        auto bindPipeline(Pipeline& pipeline)             -> void;
-        auto draw(u32 vertexCount)                        -> void;
+        auto begin()                                                    -> void;
+        auto end()                                                      -> void;
+        auto beginPresent()                                             -> void;
+        auto endPresent()                                               -> void;
+        auto beginRendering(Image const& image)                         -> void;
+        auto endRendering()                                             -> void;
+        auto barrier(Image& image, ImageLayout newLayout)               -> void;
+        auto bindPipeline(Pipeline& pipeline)                           -> void;
+        auto draw(u32 vertexCount)                                      -> void;
+        auto drawIndirect(Buffer& buffer, size_t offset, u32 drawCount) -> void;
+        auto drawIndirectCount(Buffer& buffer, u32 maxDraw)             -> void;
 
     private:
         u32 const m_index;
@@ -217,6 +234,8 @@ namespace vk
         PipelineBindPoint               bindPoint;
         ArrayProxy<PipelineShaderStage> stages;
         ArrayProxy<PipelineDescriptor>  descriptors;
+        PipelineTopology                topology;
+        PipelineCullMode                cullMode;
         bool                            depthWrite;
         bool                            colorBlending;
     };
@@ -225,7 +244,9 @@ namespace vk
     auto teardown()                                      -> void;
     auto present()                                       -> void;
     auto waitIdle()                                      -> void;
+    auto rebuildCommands()                               -> void;
     auto onResize(std::function<void()> resizeCallback)  -> void;
+    auto onRecord(std::function<void()> recordCallback)  -> void;
     auto getWidth()                                      -> f32;
     auto getHeight()                                     -> f32;
     auto getAspectRatio()                                -> f32;

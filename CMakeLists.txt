@@ -16,7 +16,11 @@ if (MSVC)
     #set_target_properties(LightFrame PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
 endif()
 
-#compile shader to bin directory-------------------------------------
+#copy assets to bin directory
+
+file(COPY assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+#compile shader to bin directory
 
 find_program(GLSL_VALIDATOR glslangValidator HINTS
     ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE}

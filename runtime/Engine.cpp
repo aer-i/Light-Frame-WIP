@@ -1,8 +1,11 @@
 #include "Engine.hpp"
-#include "Camera.hpp"
 #include "Window.hpp"
 #include "Renderer.hpp"
+#include "ImguiRenderer.hpp"
+#include "Grid.hpp"
 #include "Thread.hpp"
+#include "Scene.hpp"
+#include "TextRenderer.hpp"
 #include <aixlog.hpp>
 
 auto Engine::Init() -> void
@@ -10,6 +13,7 @@ auto Engine::Init() -> void
     AixLog::Log::init<AixLog::SinkCout>(AixLog::Severity::trace);
     Window::Create();
     vk::init();
+    vk::imgui::init();
 }
 
 auto Engine::Execute() -> void
@@ -19,45 +23,33 @@ auto Engine::Execute() -> void
     vk::Buffer indexBuffer;
     vk::Buffer uniformBuffer;
     vk::Image  texture;
+    Font     font("assets/fonts/Arial.ttf");
+    TextRenderer textRenderer(font);
+
+    auto scene{ Scene{"Main_scene"} };
 
     Camera camera;
     camera.yawPitch.x = -90.f;
     camera.position = { 0.f, 0.f, -3.f };
-    camera.setProjection(glm::radians(70.f), vk::getAspectRatio(), 0.1f, 1024.f);
+    camera.setProjection(glm::radians(40.f), vk::getAspectRatio(), 0.1f, 1024.f);
     camera.update();
 
-    f32 vertices[] = {
-        -0.5f, -0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f,
-         0.5f,  0.5f, 0.0f,
-        -0.5f,  0.5f, 0.0f
-    };
-
-    f32 uvs[] = {
-        1.f, 0.f,
-        0.f, 0.f,
-        0.f, 1.f,
-        1.f, 1.f
-    };
-
-    u32 indices[] = { 0, 1, 2, 0, 2, 3 };
-
-    positionBuffer.allocate(sizeof(vertices),  vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
-    uvsBuffer.allocate     (sizeof(uvs),       vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
-    indexBuffer.allocate   (sizeof(indices),   vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
-    uniformBuffer.allocate (sizeof(glm::mat4), vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
+    positionBuffer.allocate(scene.m_meshLoader.m_positions.size() * 4,  vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
+    uvsBuffer.allocate     (scene.m_meshLoader.m_uvs.size() * 4,       vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
+    indexBuffer.allocate   (scene.m_meshLoader.m_indices.size() * 4,   vk::BufferUsage::eStorageBuffer, vk::MemoryType::eDevice);
+    uniformBuffer.allocate (sizeof(glm::mat4) * 3, vk::BufferUsage::eUniformBuffer, vk::MemoryType::eHost);
     
-    positionBuffer.writeData(vertices);
-    uvsBuffer.writeData(uvs);
-    indexBuffer.writeData(indices);
+    positionBuffer.writeData(scene.m_meshLoader.m_positions.data());
+    uvsBuffer.writeData(scene.m_meshLoader.m_uvs.data());
+    indexBuffer.writeData(scene.m_meshLoader.m_indices.data());
 
-    texture.loadFromFile2D("rock.png");
+    texture.loadFromFile2D("assets/textures/rock.png");
 
     auto pipeline{ vk::createPipeline(vk::PipelineConfig{
         .bindPoint = vk::PipelineBindPoint::eGraphics,
         .stages = {
-            { .stage = vk::ShaderStage::eVertex,   .filepath = "shaders/main.vert.spv"},
-            { .stage = vk::ShaderStage::eFragment, .filepath = "shaders/main.frag.spv"}
+            { .stage = vk::ShaderStage::eVertex,   .path = "shaders/main.vert.spv"},
+            { .stage = vk::ShaderStage::eFragment, .path = "shaders/main.frag.spv"}
         },
         .descriptors = {
             { .binding = 0, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eStorageBuffer,        .pBuffer = &indexBuffer    },
@@ -65,41 +57,43 @@ auto Engine::Execute() -> void
             { .binding = 2, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eStorageBuffer,        .pBuffer = &uvsBuffer      },
             { .binding = 3, .shaderStage = vk::ShaderStage::eVertex,   .descriptorType = vk::DescriptorType::eUniformBuffer,        .pBuffer = &uniformBuffer  },
             { .binding = 4, .shaderStage = vk::ShaderStage::eFragment, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pBuffer = nullptr         }
-        }
+        },
+        .topology = vk::PipelineTopology::eTriangleList
     })};
 
     pipeline.writeImage(&texture, 0, vk::DescriptorType::eCombinedImageSampler);
+    auto grid{ GridRenderer{uniformBuffer} };
 
-    auto threadPool{ ThreadPool{vk::getCommandBufferCount()} };
     auto recordCommands{ [&]() -> void
     {
         for (auto i{ vk::getCommandBufferCount() }; i--; )
         {
-            threadPool.enqueue([i, &pipeline]
-            {
-                auto cmd{ vk::Cmd{i} };
-                cmd.begin();
-                cmd.beginPresent();
-                cmd.bindPipeline(pipeline);
-                cmd.draw(6);
-                cmd.endPresent();
-                cmd.end();
-            });
+            auto cmd{ vk::Cmd{i} };
+            cmd.begin();
+            cmd.beginPresent();
+            grid.draw(cmd);
+            cmd.bindPipeline(pipeline);
+            cmd.draw(86832);
+            textRenderer.recordCommands(cmd);
+            vk::imgui::render(cmd);
+            cmd.endPresent();
+            cmd.end();
         }
-
-        threadPool.wait();
     }};
     recordCommands();
 
+    vk::onRecord(recordCommands);
     vk::onResize([&]() -> void
     {
         recordCommands();
         camera.setProjection(glm::radians(70.f), vk::getAspectRatio(), 0.1f, 1024.f);
     });
 
+
     auto previousTime{ Window::GetTime() };
     auto frameCount{ u32{} };
     auto relativeMouseMode{ bool{} };
+    auto fpsText{ std::string{} };
 
     while (Window::Available())
     {
@@ -108,27 +102,39 @@ auto Engine::Execute() -> void
 
         if (currentTime - previousTime >= 1.0)
         {
-            Window::SetTitle(std::string("Frames per second: ") + std::to_string(frameCount));
+            fpsText = "fps: " + std::to_string(frameCount);
             frameCount = 0;
             previousTime = currentTime;
         }
+
+        Window::Update();
 
         if (Window::GetKeyDown(key::eEscape))
         {
             relativeMouseMode = !relativeMouseMode;
             Window::SetRelativeMouseMode(relativeMouseMode);
         }
-        
-        Window::Update();
 
         if (Window::GetRelativeMouseMode())
         {
             camera.update();
         }
 
-        auto projView{ camera.projection * camera.view };
-        uniformBuffer.writeData(&projView);
+        glm::mat4 uniformData[3] = {
+            camera.projection,
+            camera.view,
+            camera.projection * camera.view
+        };
 
+        uniformBuffer.writeData(uniformData);
+
+        textRenderer.render2D(fpsText, { Window::GetWidth() - 300.f, Window::GetHeight() - 50.f}, 0.2f);
+        textRenderer.render2D("Hello world", {50, 50});
+        textRenderer.flush();
+
+        ImGui::ShowDemoWindow();
+        
+        vk::imgui::update();
         vk::present();
     }
     vk::waitIdle();
@@ -136,6 +142,7 @@ auto Engine::Execute() -> void
 
 auto Engine::Teardown() -> void
 {
+    vk::imgui::teardown();
     vk::teardown();
     Window::Teardown();
 }

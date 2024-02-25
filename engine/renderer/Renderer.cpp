@@ -54,7 +54,11 @@ namespace vk
         using DescriptorVector       = std::vector<VkDescriptorSet>;
         using SemaphoreVector        = std::vector<VkSemaphore>;
         using FenceVector            = std::vector<VkFence>;
-        using ResizeCallback         = std::function<void()>;
+        using ImageHandleVector      = std::vector<VkImage>;
+        using ImageViewVector        = std::vector<VkImageView>;
+        using BufferVector           = std::vector<VkBuffer>;
+        using AllocationVector       = std::vector<VmaAllocation>;
+        using Callback               = std::function<void()>;
 
     public:
         VmaAllocator             allocator;
@@ -69,10 +73,16 @@ namespace vk
         VkExtent2D               extent;
         VkFormat                 colorFormat;
         VkDescriptorPool         descriptorPool;
-        VkSampler                sampler;
+        VkSampler                repeatSampler;
+        VkSampler                clampSampler;
         VkCommandPool            immediateCommandPool;
         VkCommandBuffer          immediateCommandBuffer;
         VkFence                  immediateFence;
+        ImageHandleVector        images;
+        ImageViewVector          imageViews;
+        AllocationVector         imageAllocations;
+        BufferVector             buffers;
+        AllocationVector         bufferAllocations;
         DescriptorVector         descriptors;
         DescriptorLayoutVector   descriptorLayouts;
         PipelineLayoutVector     pipelineLayouts;
@@ -84,21 +94,19 @@ namespace vk
         FenceVector              fences;
         ImageVector              swapchainImages;
         Pipeline*                currentPipeline;
-        ResizeCallback           onResize;
+        Callback                 onResize;
+        Callback                 onRecord;
         u32                      imageIndex;
         u32                      frameIndex;
         u32                      maxImageIndex;
+        u32                      shouldRebuildCmds;
     };
 
     auto static g_context{ Context() };
 
-    Buffer::~Buffer()
-    {
-        if (g_context.device &&allocation && handle) vmaDestroyBuffer(g_context.allocator, handle, allocation);
-    }
-
     auto Buffer::allocate(u32 dataSize, BufferUsageFlags usage, MemoryType memory) -> void
     {
+        handleIndex = static_cast<u32>(g_context.buffers.size());
         size = dataSize;
 
         VkBufferCreateInfo bufferCreateInfo;
@@ -135,6 +143,8 @@ namespace vk
             break;
         }
 
+        auto handle{ VkBuffer{} };
+        auto allocation{ VmaAllocation{} };
         auto allocationInfo{ VmaAllocationInfo() };
 
         vkCheck(vmaCreateBuffer(
@@ -149,19 +159,23 @@ namespace vk
         mappedData = allocationInfo.pMappedData;
 
         vmaGetAllocationMemoryProperties(g_context.allocator, allocation, &memoryType);
+
+        g_context.buffers.emplace_back(handle);
+        g_context.bufferAllocations.emplace_back(allocation);
     }
 
-    auto Buffer::writeData(void const* data) -> void
+    auto Buffer::writeData(void const* data, size_t size) -> void
     {
         if (memoryType & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
         {
-            memcpy(mappedData, data, size);
-            vmaFlushAllocation(g_context.allocator, allocation, 0, size);
+            std::memcpy(mappedData, data, size ? size : this->size);
+            
+            vmaFlushAllocation(g_context.allocator, g_context.bufferAllocations[handleIndex], 0, size ? size : this->size);
         }
         else
         {
             VkBufferCreateInfo bufferCreateInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-            bufferCreateInfo.size = size;
+            bufferCreateInfo.size = size ? size : this->size;
             bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         
             VmaAllocationCreateInfo allocationCreateInfo{};
@@ -173,55 +187,46 @@ namespace vk
             VmaAllocationInfo allocationInfo;
             vmaCreateBuffer(g_context.allocator, &bufferCreateInfo, &allocationCreateInfo, &stagingBuffer, &stagingAllocation, &allocationInfo);
         
-            memcpy(allocationInfo.pMappedData, data, size);
-            vmaFlushAllocation(g_context.allocator, stagingAllocation, 0, size);
+            memcpy(allocationInfo.pMappedData, data, size ? size : this->size);
+            vmaFlushAllocation(g_context.allocator, stagingAllocation, 0, size ? size : this->size);
 
             VkBufferCopy copy;
             copy.srcOffset = 0;
             copy.dstOffset = 0;
-            copy.size = size;
+            copy.size = size ? size : this->size;
 
             g_context.immediateSubmit([&](VkCommandBuffer commandBuffer)
             {
-                vkCmdCopyBuffer(commandBuffer, stagingBuffer, handle, 1, &copy);
+                vkCmdCopyBuffer(commandBuffer, stagingBuffer, g_context.buffers[handleIndex], 1, &copy);
             });
 
             vmaDestroyBuffer(g_context.allocator, stagingBuffer, stagingAllocation);
         }
     }
 
-    Image::~Image()
-    {
-        auto device{ g_context.device };
-
-        if (device && allocation)
-        {
-            if (handleView)
-            vkDestroyImageView(device, handleView, nullptr);
-            vmaDestroyImage(g_context.allocator, handle, allocation);
-        } 
-    }
-
     auto Image::loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void
     {
-        this->handle = image;
-        this->handleView = imageView;
+        this->handleIndex = static_cast<u32>(g_context.images.size());
         this->size.x = g_context.extent.width;
         this->size.y = g_context.extent.height;
         this->layout = ImageLayout::eUndefined;
         this->aspect = Aspect::eColor;
         this->usage = ImageUsage::eColorAttachment | ImageUsage::eTransferDst;
-        this->allocation = nullptr;
         this->format = imageFormat;
         this->layerCount = 1;
+
+        g_context.images.emplace_back(image);
+        g_context.imageViews.emplace_back(imageView);
+        g_context.imageAllocations.emplace_back(nullptr);
     }
 
-    auto Image::allocate(glm::uvec2 size, ImageUsageFlags usage) -> void
+    auto Image::allocate(glm::uvec2 size, ImageUsageFlags usage, Format format) -> void
     {
+        this->handleIndex = static_cast<u32>(g_context.images.size());
         this->size = size;
         this->usage = usage;
         this->layerCount = 1;
-        this->format = Format::eRGBA8_unorm;
+        this->format = format;
         this->aspect = VK_IMAGE_ASPECT_COLOR_BIT;
         this->layout = ImageLayout::eShaderRead;
 
@@ -241,6 +246,10 @@ namespace vk
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
         allocationCreateInfo.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        auto& handle = g_context.images.emplace_back();
+        auto& handleView = g_context.imageViews.emplace_back();
+        auto& allocation = g_context.imageAllocations.emplace_back();
 
         VmaAllocationInfo allocationInfo;
         vkCheck(vmaCreateImage(g_context.allocator, &imageCreateInfo, &allocationCreateInfo, &handle, &allocation, &allocationInfo));
@@ -267,7 +276,7 @@ namespace vk
         vkCheck(vkCreateImageView(g_context.device, &imageViewCreateInfo, nullptr, &handleView));
     }
 
-    auto Image::writeToImage(void const *data, size_t dataSize) -> void
+    auto Image::write(void const *data, size_t dataSize) -> void
     {
         VkBufferCreateInfo bufferCreateInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         bufferCreateInfo.size = dataSize;
@@ -297,7 +306,7 @@ namespace vk
         VkImageMemoryBarrier2 memoryBarrier;
         memoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         memoryBarrier.pNext = nullptr;
-        memoryBarrier.image = handle;
+        memoryBarrier.image = g_context.images[handleIndex];
         memoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         memoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -321,12 +330,86 @@ namespace vk
             memoryBarrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
             vkCmdPipelineBarrier2(commandBuffer, &dependency);
 
-            vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+            vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, g_context.images[handleIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
             memoryBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
             memoryBarrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
             memoryBarrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             memoryBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+            memoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            memoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            vkCmdPipelineBarrier2(commandBuffer, &dependency);
+        });
+
+        vmaDestroyBuffer(g_context.allocator, stagingBuffer, stagingAllocation);
+    }
+
+    auto Image::subwrite(void const *data, size_t dataSize, glm::ivec2 offset, glm::uvec2 size) -> void
+    {
+        VkBufferCreateInfo bufferCreateInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        bufferCreateInfo.size = dataSize;
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    
+        VmaAllocationCreateInfo allocationCreateInfo{};
+        allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    
+        VkBuffer stagingBuffer;
+        VmaAllocation stagingAllocation;
+        VmaAllocationInfo allocationInfo;
+        vmaCreateBuffer(g_context.allocator, &bufferCreateInfo, &allocationCreateInfo, &stagingBuffer, &stagingAllocation, &allocationInfo);
+    
+        memcpy(allocationInfo.pMappedData, data, dataSize);
+        vmaFlushAllocation(g_context.allocator, stagingAllocation, 0, dataSize);
+
+        VkBufferImageCopy copy{};
+        copy.imageSubresource.aspectMask = aspect;
+        copy.imageSubresource.layerCount = layerCount;
+        copy.imageOffset = {
+            .x = offset.x,
+            .y = offset.y
+        };
+        copy.imageExtent = {
+            .width = size.x,
+            .height = size.y,
+            .depth = 1
+        };
+
+        VkImageMemoryBarrier2 memoryBarrier;
+        memoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        memoryBarrier.pNext = nullptr;
+        memoryBarrier.image = g_context.images[handleIndex];
+        memoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        memoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        memoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        memoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        memoryBarrier.subresourceRange.aspectMask = aspect;
+        memoryBarrier.subresourceRange.baseMipLevel = 0;
+        memoryBarrier.subresourceRange.levelCount = layerCount;
+        memoryBarrier.subresourceRange.baseArrayLayer = 0;
+        memoryBarrier.subresourceRange.layerCount = 1;
+        
+        VkDependencyInfo dependency{};
+        dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency.imageMemoryBarrierCount = 1;
+        dependency.pImageMemoryBarriers = &memoryBarrier;
+
+        g_context.immediateSubmit([&](VkCommandBuffer commandBuffer)
+        {
+            memoryBarrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+            memoryBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+            memoryBarrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            memoryBarrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            vkCmdPipelineBarrier2(commandBuffer, &dependency);
+
+            vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, g_context.images[handleIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+            memoryBarrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+            memoryBarrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            memoryBarrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            memoryBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
+            memoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            memoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             vkCmdPipelineBarrier2(commandBuffer, &dependency);
         });
 
@@ -342,23 +425,15 @@ namespace vk
         {
             LOG(ERROR) << "Failed to load texture: " << path << '\n';
             auto data{ u32{0xFFFFFFFF} };
-            this->allocate({1, 1}, ImageUsage::eSampled);
-            this->writeToImage(&data, 4);
+            this->allocate({1, 1}, ImageUsage::eSampled, Format::eRGBA8_unorm);
+            this->write(&data, 4);
             return;
         }
 
-        this->allocate({w, h}, ImageUsage::eSampled);
-        this->writeToImage(imageBytes, w * h * STBI_rgb_alpha);
+        this->allocate({w, h}, ImageUsage::eSampled, Format::eRGBA8_unorm);
+        this->write(imageBytes, w * h * STBI_rgb_alpha);
 
         stbi_image_free(imageBytes);
-    }
-
-    Pipeline::~Pipeline()
-    {
-        if (g_context.pipelines[handleIndex])         vkDestroyPipeline(g_context.device, g_context.pipelines[handleIndex], nullptr);
-        if (g_context.pipelineLayouts[handleIndex])   vkDestroyPipelineLayout(g_context.device, g_context.pipelineLayouts[handleIndex], nullptr);
-        if (descriptor != ~0u)
-        if (g_context.descriptorLayouts[descriptor])  vkDestroyDescriptorSetLayout(g_context.device, g_context.descriptorLayouts[descriptor], nullptr);
     }
 
     auto Pipeline::writeImage(Image* pImage, u32 arrayElement, DescriptorType type) -> void
@@ -371,8 +446,8 @@ namespace vk
 
         VkDescriptorImageInfo imageInfo;
         imageInfo.imageLayout = static_cast<VkImageLayout>(pImage->layout);
-        imageInfo.imageView = pImage->handleView;
-        imageInfo.sampler = g_context.sampler;
+        imageInfo.imageView = g_context.imageViews[pImage->handleIndex];
+        imageInfo.sampler = g_context.clampSampler;
 
         VkWriteDescriptorSet write;
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -422,11 +497,12 @@ namespace vk
     auto Cmd::beginRendering(Image const& image) -> void
     {
         VkRenderingAttachmentInfo colorAttachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
-        colorAttachment.imageView = image.handleView;
+        colorAttachment.imageView = g_context.imageViews[image.handleIndex];
         colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         colorAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.clearValue.color = { 0.3f, 0.5f, 1.f, 1.f };
 
         VkRenderingInfo renderingInfo{ VK_STRUCTURE_TYPE_RENDERING_INFO };
         renderingInfo.flags = 0;
@@ -476,7 +552,7 @@ namespace vk
         imageBarrier.subresourceRange.baseArrayLayer = 0;
         imageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         imageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        imageBarrier.image = image.handle;
+        imageBarrier.image = g_context.images[image.handleIndex];
 
         switch (oldLayout)
         {
@@ -557,6 +633,24 @@ namespace vk
         vkCmdDraw(g_context.commandBuffers[m_index], vertexCount, 1, 0, 0);
     }
 
+    auto Cmd::drawIndirect(Buffer& buffer, size_t offset, u32 drawCount) -> void
+    {
+        vkCmdDrawIndirect(g_context.commandBuffers[m_index], g_context.buffers[buffer.handleIndex], offset, drawCount, sizeof(VkDrawIndirectCommand));
+    }
+
+    auto Cmd::drawIndirectCount(Buffer &buffer, u32 maxDraw) -> void
+    {
+        vkCmdDrawIndirectCount(
+            g_context.commandBuffers[m_index],
+            g_context.buffers[buffer.handleIndex],
+            sizeof(u32),
+            g_context.buffers[buffer.handleIndex],
+            0,
+            maxDraw,
+            sizeof(VkDrawIndirectCommand)
+        );
+    }
+
     auto init() -> void
     {
         std::memset(&g_context, 0, sizeof(Context));
@@ -582,6 +676,14 @@ namespace vk
 
             previousWidth  = Window::GetWidth();
             previousHeight = Window::GetHeight();
+            g_context.shouldRebuildCmds = 0;
+        }
+
+        if (g_context.shouldRebuildCmds)
+        {
+            g_context.shouldRebuildCmds = false;
+            vkQueueWaitIdle(g_context.graphicsQueue.queue);
+            g_context.onRecord();
         }
 
         vkCheck(vkWaitForFences(g_context.device, 1, &g_context.fences[g_context.frameIndex], false, ~0ull));
@@ -654,6 +756,11 @@ namespace vk
         if (g_context.device) vkDeviceWaitIdle(g_context.device);
     }
 
+    auto rebuildCommands() -> void
+    {
+        g_context.shouldRebuildCmds = true;
+    }
+
     auto createPipeline(PipelineConfig const& config) -> Pipeline
     {
         auto static currentHandleIndex{ u32(0) };
@@ -717,9 +824,9 @@ namespace vk
                 }
 
                 bufferInfos.push_back(VkDescriptorBufferInfo{
-                    .buffer = descriptor.pBuffer->handle,
-                    .offset = 0,
-                    .range = ~0ULL
+                    .buffer = g_context.buffers[descriptor.pBuffer->handleIndex],
+                    .offset = descriptor.offset,
+                    .range = descriptor.size ? descriptor.size : ~0ull
                 });
 
                 VkWriteDescriptorSet descriptorWrite;
@@ -757,11 +864,11 @@ namespace vk
         for (u32 i = 0; i < config.stages.size(); ++i)
         {
             auto stage{ config.stages.begin() + i };
-            auto code { readFile(stage->filepath) };
+            auto code { readFile(stage->path)     };
 
             if (code.empty())
             {
-                throw std::runtime_error(std::string("Failed to load shader file: ") + stage->filepath);
+                throw std::runtime_error(std::string("Failed to load shader file: ") + stage->path);
             }
 
             VkShaderModuleCreateInfo shaderModuleCreateInfo{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
@@ -793,10 +900,10 @@ namespace vk
         dynamicStateCreateInfo.pDynamicStates = dynamicStates.data();
 
         VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
-        inputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssemblyStateCreateInfo.topology = static_cast<VkPrimitiveTopology>(config.topology);
 
         VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
-        rasterizationStateCreateInfo.cullMode = VK_CULL_MODE_NONE;
+        rasterizationStateCreateInfo.cullMode = static_cast<VkCullModeFlags>(config.cullMode);
         rasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizationStateCreateInfo.lineWidth = 1.0f;
@@ -806,7 +913,7 @@ namespace vk
         multisampleStateCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
         VkPipelineColorBlendAttachmentState blendAttachmentState{};
-        blendAttachmentState.blendEnable = false;
+        blendAttachmentState.blendEnable = config.colorBlending;
         blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
         blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -882,6 +989,11 @@ namespace vk
     auto onResize(std::function<void()> resizeCallback) -> void
     {
         g_context.onResize = std::move(resizeCallback);
+    }
+
+    auto onRecord(std::function<void()> recordCallback) -> void
+    {
+        g_context.onRecord = std::move(recordCallback);
     }
 
     auto getWidth() -> f32
@@ -1065,9 +1177,15 @@ namespace vk
         queueCreateInfo.pQueuePriorities = &queuePriority;
 
         VkPhysicalDeviceVulkan11Features vulkan11Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+        vulkan11Features.storageBuffer16BitAccess = true;
+        vulkan11Features.shaderDrawParameters     = true;
+
         VkPhysicalDeviceVulkan12Features vulkan12Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
         vulkan12Features.pNext = &vulkan11Features;
-        vulkan12Features.descriptorBindingPartiallyBound = true;
+        vulkan12Features.shaderSampledImageArrayNonUniformIndexing = true;
+        vulkan12Features.descriptorBindingPartiallyBound           = true;
+        vulkan12Features.runtimeDescriptorArray                    = true;
+        vulkan12Features.drawIndirectCount                         = true;
 
         VkPhysicalDeviceVulkan13Features vulkan13Features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
         vulkan13Features.pNext = &vulkan12Features;
@@ -1076,7 +1194,8 @@ namespace vk
 
         VkPhysicalDeviceFeatures2 enabledFeatures{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
         enabledFeatures.pNext = &vulkan13Features;
-        enabledFeatures.features.fillModeNonSolid = true;
+        enabledFeatures.features.fillModeNonSolid  = true;
+        enabledFeatures.features.multiDrawIndirect = true;
 
         auto const* extension{ VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -1181,7 +1300,13 @@ namespace vk
         samplerCreateInfo.maxLod = 16.0f;
         samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
 
-        vkCheck(vkCreateSampler(device, &samplerCreateInfo, nullptr, &sampler));
+        vkCheck(vkCreateSampler(device, &samplerCreateInfo, nullptr, &repeatSampler));
+
+        samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+
+        vkCheck(vkCreateSampler(device, &samplerCreateInfo, nullptr, &clampSampler));
 
         LOG(INFO, "Vulkan Context") << "Created device\n";
     }
@@ -1322,9 +1447,13 @@ namespace vk
 
         if (oldSwapchain) vkDestroySwapchainKHR(device, oldSwapchain, nullptr);
 
-        for (size_t i = 0; i < swapchainImages.size(); ++i)
+        for (auto& swapchainImage : swapchainImages)
         {
-            if (swapchainImages[i].handleView) vkDestroyImageView(device, swapchainImages[i].handleView, nullptr);
+            if (imageViews[swapchainImage.handleIndex])
+            {
+                vkDestroyImageView(device, imageViews[swapchainImage.handleIndex], nullptr);
+                imageViews[swapchainImage.handleIndex] = nullptr;
+            }
         }
 
         vkGetSwapchainImagesKHR(device, swapchain, &maxImageIndex, nullptr);
@@ -1379,14 +1508,34 @@ namespace vk
     {
         vkDeviceWaitIdle(device);
 
-        vmaDestroyAllocator(allocator);
 
         if (device)
         {
-            for (size_t i = 0; i < swapchainImages.size(); ++i)
+            for (auto i{ images.size() }; i--; )
+            {
+                if (imageViews[i])                    vkDestroyImageView(device, imageViews[i], nullptr);
+                if (images[i] && imageAllocations[i]) vmaDestroyImage(allocator, images[i], imageAllocations[i]);
+            }
+
+            for (auto i{ buffers.size() }; i--; )
+            {
+                if (bufferAllocations[i] && buffers[i]) vmaDestroyBuffer(allocator, buffers[i], bufferAllocations[i]);
+            }
+
+            for (auto i{ pipelines.size() }; i--; )
+            {
+                if (pipelines[i])       vkDestroyPipeline(device, pipelines[i], nullptr);
+                if (pipelineLayouts[i]) vkDestroyPipelineLayout(device, pipelineLayouts[i], nullptr);
+            }
+
+            for (auto i{ descriptorLayouts.size() }; i--; )
+            {
+                if (descriptorLayouts[i]) vkDestroyDescriptorSetLayout(device, descriptorLayouts[i], nullptr);
+            }
+
+            for (auto i{ swapchainImages.size() }; i--; )
             {
                 if (commandPools[i])               vkDestroyCommandPool(device, commandPools[i], nullptr);
-                if (swapchainImages[i].handleView) vkDestroyImageView(device, swapchainImages[i].handleView, nullptr);
                 if (fences[i])                     vkDestroyFence(device, fences[i], nullptr);
                 if (renderSemaphores[i])           vkDestroySemaphore(device, renderSemaphores[i], nullptr);
                 if (presentSemaphores[i])          vkDestroySemaphore(device, presentSemaphores[i], nullptr);
@@ -1394,9 +1543,11 @@ namespace vk
 
             if (immediateFence)       vkDestroyFence(device, immediateFence, nullptr);
             if (immediateCommandPool) vkDestroyCommandPool(device, immediateCommandPool, nullptr);
-            if (sampler)              vkDestroySampler(device, sampler, nullptr);
+            if (clampSampler)         vkDestroySampler(device, clampSampler, nullptr);
+            if (repeatSampler)        vkDestroySampler(device, repeatSampler, nullptr);
             if (descriptorPool)       vkDestroyDescriptorPool(device, descriptorPool, nullptr);
             if (swapchain)            vkDestroySwapchainKHR(device, swapchain, nullptr);
+            vmaDestroyAllocator(allocator);
             vkDestroyDevice(device, nullptr);
         }
 

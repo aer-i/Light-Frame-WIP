@@ -1,11 +1,15 @@
 set(ENGINE_SOURCES
 "renderer/Renderer.cpp"
 "renderer/Window.cpp"
+"renderer/ImguiRenderer.cpp"
+"renderer/Font.cpp"
+"scene/MeshLoader.cpp"
 )
 
 set(ENGINE_DIRS
 "renderer/"
 "core/"
+"scene/"
 )
 
 target_sources(LightFrame PRIVATE ${ENGINE_SOURCES})
