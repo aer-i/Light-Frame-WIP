@@ -9,49 +9,49 @@ struct SDL_Window;
 class Window
 {
 public:
-    static auto Create()   -> void;
-    static auto Teardown() -> void;
-    static auto Update()   -> void;
-    
-    static auto SetTitle(std::string_view title)  -> void;
-    static auto SetRelativeMouseMode(bool enable) -> void;
-    static auto GetRelativeMouseMode()            -> bool;
-    static auto GetKey(i32 key)                   -> bool;
-    static auto GetKeyDown(i32 key)               -> bool;
-    static auto GetKeyUp(i32 key)                 -> bool;
-    static auto GetButton(int button)             -> bool;
-    static auto GetButtonDown(int button)         -> bool;
-    static auto GetButtonUp(int button)           -> bool;
-    static auto GetTime()                         -> f64;
+    Window();
+    ~Window();
 
-    static inline auto GetDeltaTime()     -> const f32          { return m_deltaTime;   }
-    static inline auto GetHandle()        -> const SDL_Window*  { return m_handle;      }
-    static inline auto GetSize()          -> const glm::ivec2&  { return m_size;        }
-    static inline auto GetWidth()         -> const i32          { return m_size.x;      }
-    static inline auto GetHeight()        -> const i32          { return m_size.y;      }
-    static inline auto GetTile()          -> const std::string& { return m_title;       }
-    static inline auto GetPos()           -> const glm::ivec2&  { return m_pos;         }
-    static inline auto GetPosX()          -> const i32          { return m_pos.x;       }
-    static inline auto GetPosY()          -> const i32          { return m_pos.y;       }
-    static inline auto GetCursorPos()     -> const glm::vec2&   { return m_cursorPos;   }
-    static inline auto GetCursorX()       -> const f32          { return m_cursorPos.x; }
-    static inline auto GetCursorY()       -> const f32          { return m_cursorPos.y; }
-    static inline auto GetCursorOffset()  -> const glm::vec2&   { return m_cursorOff;   }
-    static inline auto GetCursorOffsetX() -> const f32          { return m_cursorOff.x; }
-    static inline auto GetCursorOffsetY() -> const f32          { return m_cursorOff.y; }
-    static inline auto Available()        -> const bool         { return m_available;   }
+    auto update()                          -> void;
+    auto setTitle(std::string_view title)  -> void;
+    auto setRelativeMouseMode(bool enable) -> void;
+    auto getRelativeMouseMode()            -> bool;
+    auto getKey(i32 key)                   -> bool;
+    auto getKeyDown(i32 key)               -> bool;
+    auto getKeyUp(i32 key)                 -> bool;
+    auto getButton(i32 button)             -> bool;
+    auto getButtonDown(i32 button)         -> bool;
+    auto getButtonUp(i32 button)           -> bool;
+    auto getTime()                         -> f64;
+
+    inline auto getDeltaTime()     -> const f32          { return m_deltaTime;   }
+    inline auto getHandle()        -> const SDL_Window*  { return m_handle;      }
+    inline auto getSize()          -> const glm::ivec2&  { return m_size;        }
+    inline auto getWidth()         -> const i32          { return m_size.x;      }
+    inline auto getHeight()        -> const i32          { return m_size.y;      }
+    inline auto getTile()          -> const std::string& { return m_title;       }
+    inline auto getPos()           -> const glm::ivec2&  { return m_pos;         }
+    inline auto getPosX()          -> const i32          { return m_pos.x;       }
+    inline auto getPosY()          -> const i32          { return m_pos.y;       }
+    inline auto getCursorPos()     -> const glm::vec2&   { return m_cursorPos;   }
+    inline auto getCursorX()       -> const f32          { return m_cursorPos.x; }
+    inline auto getCursorY()       -> const f32          { return m_cursorPos.y; }
+    inline auto getCursorOffset()  -> const glm::vec2&   { return m_cursorOff;   }
+    inline auto getCursorOffsetX() -> const f32          { return m_cursorOff.x; }
+    inline auto getCursorOffsetY() -> const f32          { return m_cursorOff.y; }
+    inline auto available()        -> const bool         { return m_available;   }
 
 private:
-    static inline SDL_Window* m_handle        = nullptr;
-    static inline glm::ivec2  m_size          = glm::ivec2(1280, 720);
-    static inline glm::ivec2  m_pos           = glm::ivec2(50, 50);
-    static inline glm::vec2   m_cursorPos     = glm::vec2(0, 0);
-    static inline glm::vec2   m_cursorOff     = glm::vec2(0, 0);
-    static inline glm::vec2   m_globCursorPos = glm::vec2(0, 0);
-    static inline std::string m_title         = "Light Frame";
-    static inline f32         m_deltaTime     = f32(0.f);
-    static inline u8*         m_keyboardState = nullptr;
-    static inline bool        m_available     = bool(true);
+    SDL_Window* m_handle        = nullptr;
+    glm::ivec2  m_size          = glm::ivec2(1280, 720);
+    glm::ivec2  m_pos           = glm::ivec2(50, 50);
+    glm::vec2   m_cursorPos     = glm::vec2(0, 0);
+    glm::vec2   m_cursorOff     = glm::vec2(0, 0);
+    glm::vec2   m_globCursorPos = glm::vec2(0, 0);
+    std::string m_title         = "Light Frame";
+    f32         m_deltaTime     = f32(0.f);
+    u8*         m_keyboardState = nullptr;
+    bool        m_available     = bool(true);
 };
 
 namespace key

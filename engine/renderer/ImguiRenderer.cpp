@@ -75,8 +75,6 @@ namespace vk::imgui
 
     auto update() -> void
     {
-        // going insane rn
-        return;
         ImGui::Render();
         auto imDrawData = ImGui::GetDrawData();
 
@@ -143,8 +141,8 @@ namespace vk::imgui
 
     auto render(Cmd& cmd) -> void
     {
-        //cmd.bindPipeline(g_pipeline);
-        //cmd.drawIndirect(g_drawBuffer, 0, 1);
+        cmd.bindPipeline(g_pipeline);
+        cmd.drawIndirect(g_drawBuffer, 0, 1);
         //cmd.drawIndirectCount(g_drawBuffer, 1024 * 256);
     }
 }

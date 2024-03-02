@@ -17,7 +17,7 @@ public:
 public:
     Camera m_camera;
     MeshLoader m_meshLoader;
-    ModelComponent m_model{ m_meshLoader, "assets/kitten.obj", false };
+    ModelComponent m_model{ m_meshLoader, "assets/models/kitten.obj", false };
     vk::Buffer m_indirectDrawBuffer;
     std::string m_name;
 };

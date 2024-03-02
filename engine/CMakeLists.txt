@@ -1,12 +1,17 @@
 set(ENGINE_SOURCES
+"renderer/vulkan/Instance.cpp"
+"renderer/vulkan/Surface.cpp"
+"renderer/vulkan/PhysicalDevice.cpp"
+"renderer/vulkan/Device.cpp"
 "renderer/Renderer.cpp"
 "renderer/Window.cpp"
-"renderer/ImguiRenderer.cpp"
-"renderer/Font.cpp"
-"scene/MeshLoader.cpp"
+#"renderer/ImguiRenderer.cpp"
+#"renderer/Font.cpp"
+#"scene/MeshLoader.cpp"
 )
 
 set(ENGINE_DIRS
+"renderer/vulkan/"
 "renderer/"
 "core/"
 "scene/"

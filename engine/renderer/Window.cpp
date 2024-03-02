@@ -3,14 +3,16 @@
 #include <chrono>
 #include <SDL3/SDL.h>
 #include <backends/imgui_impl_sdl3.h>
-#include <aixlog.hpp>
+#include <spdlog/spdlog.h>
 
-auto Window::Create() -> void
+Window::Window()
 {
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
     {
         throw std::runtime_error("Failed to init SDL");
     }
+
+    spdlog::info("Initialized SDL content");
 
     m_handle = SDL_CreateWindow(
         m_title.c_str(),
@@ -27,21 +29,26 @@ auto Window::Create() -> void
     SDL_SetWindowPosition(m_handle, m_pos.x, m_pos.y);
     m_keyboardState = const_cast<u8*>(SDL_GetKeyboardState(nullptr));
 
-    LOG(INFO, "Window") << "Created window\n";
+    SDL_GetWindowSize(m_handle, &m_size.x, &m_size.y);
+
+    spdlog::info("Created window");
+    spdlog::info("Window size [ {} width; {} height ]", m_size.x, m_size.y);
 }
 
-auto Window::Teardown() -> void
+Window::~Window()
 {
     SDL_DestroyWindow(m_handle);
     SDL_Quit();
-    LOG(INFO, "Window") << "Destroyed window\n";
+
+    spdlog::info("Destroyed window");
+    spdlog::info("Terminated SDL content");
 }
 
-auto Window::Update() -> void
+auto Window::update() -> void
 {
     auto static event       { SDL_Event{} };
-    auto static previousTime{ GetTime()   };
-    auto        currentTime { GetTime()   };
+    auto static previousTime{ getTime()   };
+    auto        currentTime { getTime()   };
 
     while (SDL_PollEvent(&event))
     {
@@ -77,28 +84,28 @@ auto Window::Update() -> void
     m_keyboardState = const_cast<u8*>(SDL_GetKeyboardState(nullptr));
 }
 
-auto Window::SetTitle(std::string_view title) -> void
+auto Window::setTitle(std::string_view title) -> void
 {
     m_title = title;
     SDL_SetWindowTitle(m_handle, m_title.c_str());
 }
 
-auto Window::SetRelativeMouseMode(bool enable) -> void
+auto Window::setRelativeMouseMode(bool enable) -> void
 {
     SDL_SetRelativeMouseMode(enable);
 }
 
-auto Window::GetRelativeMouseMode() -> bool
+auto Window::getRelativeMouseMode() -> bool
 {
     return static_cast<bool>(SDL_GetRelativeMouseMode());
 }
 
-auto Window::GetKey(i32 key) -> bool
+auto Window::getKey(i32 key) -> bool
 {
     return m_keyboardState[key];
 }
 
-auto Window::GetKeyDown(i32 key) -> bool
+auto Window::getKeyDown(i32 key) -> bool
 {
     bool static prevKeyboardState[SDL_NUM_SCANCODES] = { false };
 
@@ -115,7 +122,7 @@ auto Window::GetKeyDown(i32 key) -> bool
     return false;
 }
 
-auto Window::GetKeyUp(i32 key) -> bool
+auto Window::getKeyUp(i32 key) -> bool
 {
     bool static prevKeyboardState[SDL_NUM_SCANCODES] = { false };
 
@@ -132,22 +139,22 @@ auto Window::GetKeyUp(i32 key) -> bool
     return false;
 }
 
-auto Window::GetButton(int button) -> bool
+auto Window::getButton(i32 button) -> bool
 {
     return false;
 }
 
-auto Window::GetButtonDown(int button) -> bool
+auto Window::getButtonDown(i32 button) -> bool
 {
     return false;
 }
 
-auto Window::GetButtonUp(int button) -> bool
+auto Window::getButtonUp(i32 button) -> bool
 {
     return false;
 }
 
-auto Window::GetTime() -> f64
+auto Window::getTime() -> f64
 {
     auto static startTime{ std::chrono::high_resolution_clock::now() };
     auto now{ std::chrono::high_resolution_clock::now() };

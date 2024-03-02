@@ -26,3 +26,6 @@
 [submodule "vendor/freetype"]
 	path = vendor/freetype
 	url = https://gitlab.freedesktop.org/freetype/freetype.git
+[submodule "vendor/spdlog"]
+	path = vendor/spdlog
+	url = https://github.com/gabime/spdlog.git
