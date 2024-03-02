@@ -11,17 +11,28 @@
 #include <stdexcept>
 
 vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physicalDevice)
-    : m_device{ nullptr }
+    : m_surface{ &surface }
+    , m_physicalDevice{ &physicalDevice }
+    , m_device{ nullptr }
     , m_queue{ nullptr }
+    , m_swapchain{ nullptr }
     , m_allocator{ nullptr }
 {
-    this->createDevice(instance, surface, physicalDevice);
-    this->createAllocator(instance, physicalDevice);
+    this->createDevice(instance);
+    this->createAllocator(instance);
     this->createSwapchain();
+    
+    spdlog::info("Created device");
 }
 
 vk::Device::~Device()
 {
+    if (m_swapchain)
+    {
+        vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+        m_swapchain = nullptr;
+    }
+
     if (m_allocator)
     {
         vmaDestroyAllocator(m_allocator);
@@ -38,34 +49,46 @@ vk::Device::~Device()
 }
 
 vk::Device::Device(Device&& other)
-    : m_device{ other.m_device }
+    : m_surface{ other.m_surface }
+    , m_physicalDevice{ other.m_physicalDevice }
+    , m_device{ other.m_device }
     , m_queue{ other.m_queue }
+    , m_swapchain{ other.m_swapchain }
     , m_allocator{ other.m_allocator }
 {
-    other.m_device    = nullptr;
-    other.m_queue     = nullptr;
-    other.m_allocator = nullptr;
+    other.m_surface        = nullptr;
+    other.m_physicalDevice = nullptr;
+    other.m_device         = nullptr;
+    other.m_queue          = nullptr;
+    other.m_swapchain      = nullptr;
+    other.m_allocator      = nullptr;
 }
 
 auto vk::Device::operator=(Device&& other) -> Device&
 {
-    m_device    = other.m_device;
-    m_queue     = other.m_queue;
-    m_allocator = other.m_allocator;
+    m_surface        = other.m_surface;
+    m_physicalDevice = other.m_physicalDevice;
+    m_device         = other.m_device;
+    m_queue          = other.m_queue;
+    m_swapchain      = other.m_swapchain;
+    m_allocator      = other.m_allocator;
 
-    other.m_device    = nullptr;
-    other.m_queue     = nullptr;
-    other.m_allocator = nullptr;
+    other.m_surface        = nullptr;
+    other.m_physicalDevice = nullptr;
+    other.m_device         = nullptr;
+    other.m_queue          = nullptr;
+    other.m_swapchain      = nullptr;
+    other.m_allocator      = nullptr;
 
     return *this;
 }
 
-auto vk::Device::createDevice(Instance& instance, Surface& surface, PhysicalDevice& physicalDevice) -> void
+auto vk::Device::createDevice(Instance& instance) -> void
 {
     auto propertyCount{ u32{} };
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &propertyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(*m_physicalDevice, &propertyCount, nullptr);
     auto properties{ std::vector<VkQueueFamilyProperties>{propertyCount} };
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &propertyCount, properties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(*m_physicalDevice, &propertyCount, properties.data());
 
     auto family{ u32{} };
     auto index { u32{} };
@@ -73,7 +96,7 @@ auto vk::Device::createDevice(Instance& instance, Surface& surface, PhysicalDevi
     for (auto i{ u32{} }; i < propertyCount; ++i)
     {
         auto presentSupport{ VkBool32{false} };
-        vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport);
+        vkGetPhysicalDeviceSurfaceSupportKHR(*m_physicalDevice, i, *m_surface, &presentSupport);
 
         if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT &&
             properties[i].queueFlags & VK_QUEUE_COMPUTE_BIT &&
@@ -136,7 +159,7 @@ auto vk::Device::createDevice(Instance& instance, Surface& surface, PhysicalDevi
         .ppEnabledExtensionNames = &swapchainExtension
     }};
 
-    if (vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &m_device))
+    if (vkCreateDevice(*m_physicalDevice, &deviceCreateInfo, nullptr, &m_device))
     {
         throw std::runtime_error("Failed to create VkDevice");
     }
@@ -145,11 +168,10 @@ auto vk::Device::createDevice(Instance& instance, Surface& surface, PhysicalDevi
 
     vkGetDeviceQueue(m_device, family, index, &m_queue);
 
-    spdlog::info("Created device");
     spdlog::info("Graphics queue [ family: {}; index: {} ]", family, index);
 }
 
-auto vk::Device::createAllocator(Instance& instance, PhysicalDevice& physicalDevice) -> void
+auto vk::Device::createAllocator(Instance& instance) -> void
 {
     auto const functions{ VmaVulkanFunctions{
         .vkGetInstanceProcAddr                   = vkGetInstanceProcAddr,
@@ -181,7 +203,7 @@ auto vk::Device::createAllocator(Instance& instance, PhysicalDevice& physicalDev
     }};
 
     auto const allocatorCreateInfo{ VmaAllocatorCreateInfo{
-        .physicalDevice = physicalDevice,
+        .physicalDevice = *m_physicalDevice,
         .device = m_device,
         .pVulkanFunctions = &functions,
         .instance = instance,
@@ -196,5 +218,39 @@ auto vk::Device::createAllocator(Instance& instance, PhysicalDevice& physicalDev
 
 auto vk::Device::createSwapchain() -> void
 {
+    auto format{ m_surface->getFormat(*m_physicalDevice) };
+    auto extent{ m_surface->getExtent(*m_physicalDevice) };
+    auto minImageCount{ m_surface->getClampedImageCount(*m_physicalDevice, 3u) };
+    auto presentMode{ PresentMode::eFifo };
 
+    if (m_surface->presentModeSupport(*m_physicalDevice, PresentMode::eImmediate))
+    {
+        presentMode = PresentMode::eImmediate;
+    }
+
+    if (m_surface->presentModeSupport(*m_physicalDevice, PresentMode::eMailbox))
+    {
+        presentMode = PresentMode::eMailbox;
+    }
+
+    auto const swapchainCreateInfo{ VkSwapchainCreateInfoKHR{
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = *m_surface,
+        .minImageCount = minImageCount,
+        .imageFormat = static_cast<VkFormat>(format),
+        .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+        .imageExtent = {.width = extent.width, .height = extent.height},
+        .imageArrayLayers = 1u,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = static_cast<VkPresentModeKHR>(presentMode),
+        .clipped = 1u
+    }};
+
+    if (vkCreateSwapchainKHR(m_device, &swapchainCreateInfo, nullptr, &m_swapchain))
+    {
+        throw std::runtime_error("Failed to create VkSwapchain");
+    }
 }
