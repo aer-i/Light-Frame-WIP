@@ -7,7 +7,8 @@ auto main() -> i32
 {
     try
     {
-        Engine().execute();
+        auto engine{ Engine() };
+        engine.execute();
     }
     catch (std::exception const& e)
     {

@@ -205,7 +205,7 @@ namespace vk
             vmaDestroyBuffer(g_context.allocator, stagingBuffer, stagingAllocation);
         }
     }
-
+/*
     auto Image::loadFromSwapchain(VkImage image, VkImageView imageView, Format imageFormat) -> void
     {
         this->handleIndex = static_cast<u32>(g_context.images.size());
@@ -437,6 +437,8 @@ namespace vk
 
         stbi_image_free(imageBytes);
     }
+
+    */
 
     auto Pipeline::writeImage(Image* pImage, u32 arrayElement, DescriptorType type) -> void
     {

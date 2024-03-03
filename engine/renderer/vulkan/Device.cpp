@@ -27,6 +27,8 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
 
 vk::Device::~Device()
 {
+    m_swapchainImages.clear();
+
     if (m_swapchain)
     {
         vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
@@ -252,5 +254,17 @@ auto vk::Device::createSwapchain() -> void
     if (vkCreateSwapchainKHR(m_device, &swapchainCreateInfo, nullptr, &m_swapchain))
     {
         throw std::runtime_error("Failed to create VkSwapchain");
+    }
+
+    auto imageCount{ u32{} };
+    vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, nullptr);
+    auto images{ std::vector<VkImage>{imageCount} };
+    vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, images.data());
+
+    m_swapchainImages = std::vector<Image>{ imageCount };
+
+    for (auto i{ imageCount }; i--; )
+    {
+        m_swapchainImages[i].loadFromSwapchain(this, images[i], format, {extent.width, extent.height});
     }
 }

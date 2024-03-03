@@ -1,4 +1,6 @@
 #pragma once
+#include "Image.hpp"
+#include <vector>
 
 struct VkDevice_T;
 struct VkQueue_T;
@@ -32,6 +34,11 @@ namespace vk
             return m_device;
         }
 
+        inline operator VmaAllocator() const noexcept
+        {
+            return m_allocator;
+        }
+
     private:
         auto createDevice(Instance& instance)    -> void;
         auto createAllocator(Instance& instance) -> void;
@@ -44,5 +51,7 @@ namespace vk
         VkQueue         m_queue;
         VkSwapchainKHR  m_swapchain;
         VmaAllocator    m_allocator;
+
+        std::vector<Image> m_swapchainImages;
     };
 }

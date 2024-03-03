@@ -138,6 +138,7 @@ namespace vk
         eStorageBuffer = 7
     };
 
+    /*
     class Image
     {
     public:
@@ -157,7 +158,7 @@ namespace vk
         Format format;
         glm::uvec2 size;
         u32 layerCount;
-    };
+    };*/
 
     class Buffer
     {
