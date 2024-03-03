@@ -12,6 +12,9 @@ public:
     Renderer(Window& window);
     ~Renderer();
 
+public:
+    auto renderFrame() -> void;
+
 private:
     Window&            m_window;
     vk::Instance       m_instance;

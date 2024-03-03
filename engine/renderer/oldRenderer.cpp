@@ -21,7 +21,7 @@
 #include "PhysicalDevice.hpp"
 #include "Device.hpp"
 
-static VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, uint64_t, size_t, int32_t, char const*, char const*, void*);
+//static VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT, VkDebugReportObjectTypeEXT, uint64_t, size_t, int32_t, char const*, char const*, void*);
 static auto vkErrorString(VkResult result) -> char const*;
 static auto vkCheck(VkResult result) -> void;
 static auto readFile(std::string_view filepath) -> std::vector<char>;
@@ -1642,20 +1642,20 @@ static auto vkCheck(VkResult result) -> void
     }
 }
 
-static VkBool32 VKAPI_CALL debugReportCallback(
-    VkDebugReportFlagsEXT flags,
-    VkDebugReportObjectTypeEXT objectType,
-    uint64_t object,
-    size_t location,
-    int32_t messageCode,
-    char const* pLayerPrefix,
-    char const* pMessage,
-    void* pUserData)
-{
-    LOG(DEBUG, "Validation Layer") << pMessage << '\n';
+// static VkBool32 VKAPI_CALL debugReportCallback(
+//     VkDebugReportFlagsEXT flags,
+//     VkDebugReportObjectTypeEXT objectType,
+//     uint64_t object,
+//     size_t location,
+//     int32_t messageCode,
+//     char const* pLayerPrefix,
+//     char const* pMessage,
+//     void* pUserData)
+// {
+//     LOG(DEBUG, "Validation Layer") << pMessage << '\n';
     
-    return VK_FALSE;
-}
+//     return VK_FALSE;
+// }
 
 static auto readFile(std::string_view filepath) -> std::vector<char>
 {

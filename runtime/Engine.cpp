@@ -7,8 +7,10 @@ Engine::Engine()
 
 auto Engine::execute() -> void
 {
-    //while (m_window.available())
+    while (m_window.available())
     {
         m_window.update();
+
+        m_renderer.renderFrame();
     }
 }

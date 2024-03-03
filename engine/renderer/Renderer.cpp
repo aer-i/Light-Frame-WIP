@@ -15,3 +15,19 @@ Renderer::~Renderer()
 {
     spdlog::info("Destroyed renderer");
 }
+
+auto Renderer::renderFrame() -> void
+{
+    m_device.acquireImage();
+
+    auto& commands{ m_device.getCommandBuffer() };
+
+    commands.begin();
+    commands.beginPresent();
+
+    commands.endPresent();
+    commands.end();
+
+    m_device.submitCommands(ArrayProxy<vk::CommandBuffer::Handle>{ commands });
+    m_device.present();
+}

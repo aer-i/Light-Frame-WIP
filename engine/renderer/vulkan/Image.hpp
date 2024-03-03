@@ -36,7 +36,7 @@ namespace vk
         friend class Device;
         auto loadFromSwapchain(Device* pDevice, VkImage image, Format format, glm::uvec2 size) -> void;
 
-    private:
+    public:
         inline operator VkImage() const noexcept
         {
             return m_image;
@@ -45,6 +45,31 @@ namespace vk
         inline operator VkImageView() const noexcept
         {
             return m_imageView;
+        }
+
+        inline auto getSize() const noexcept -> glm::uvec2
+        {
+            return m_size;
+        }
+
+        inline auto getWidth() const noexcept -> u32
+        {
+            return m_size.x;
+        }
+
+        inline auto getHeight() const noexcept -> u32
+        {
+            return m_size.y;
+        }
+
+        inline auto getLayout() const noexcept -> ImageLayout
+        {
+            return m_layout;
+        }
+
+        inline auto getAspect() const noexcept -> AspectFlags
+        {
+            return m_aspect;
         }
 
     private:

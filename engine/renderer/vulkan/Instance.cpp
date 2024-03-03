@@ -14,14 +14,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     void* pUserData
 )
 {
-    spdlog::debug("Validation layer: {}", pCallbackData->pMessage);
-    spdlog::debug("   Objects ");
-
-    for (auto i{ u32{} }; i < pCallbackData->objectCount; ++i)
-    {
-        spdlog::debug("{}", pCallbackData->pObjects[i].objectHandle);
-    }
-
+    spdlog::debug(pCallbackData->pMessage);
+    
     return VK_FALSE;
 }
 
@@ -50,6 +44,7 @@ vk::Instance::Instance(bool validationLayersEnabled)
 
     if (validationLayersEnabled)
     {
+        spdlog::set_level(spdlog::level::debug);
         layers.emplace_back("VK_LAYER_KHRONOS_validation");
         extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
@@ -99,7 +94,7 @@ vk::Instance::Instance(bool validationLayersEnabled)
             .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            .pfnUserCallback = debugCallback
+            .pfnUserCallback = &debugCallback
         }};
 
         if (vkCreateDebugUtilsMessengerEXT(m_instance, &debugMessengerCreateInfo, nullptr, &m_debugMessenger))

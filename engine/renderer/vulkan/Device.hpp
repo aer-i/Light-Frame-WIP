@@ -1,15 +1,20 @@
 #pragma once
 #include "Image.hpp"
-#include <vector>
+#include "CommandBuffer.hpp"
+#include "ArrayProxy.hpp"
 
 struct VkDevice_T;
 struct VkQueue_T;
 struct VkSwapchainKHR_T;
+struct VkSemaphore_T;
+struct VkFence_T;
 struct VmaAllocator_T;
 
 using VkDevice       = VkDevice_T*;
 using VkQueue        = VkQueue_T*;
 using VkSwapchainKHR = VkSwapchainKHR_T*;
+using VkSemaphore    = VkSemaphore_T*;
+using VkFence        = VkFence_T*;
 using VmaAllocator   = VmaAllocator_T*;
 
 namespace vk
@@ -29,6 +34,11 @@ namespace vk
         auto operator=(Device const&)  -> Device& = delete;
 
     public:
+        auto acquireImage() -> void;
+        auto submitCommands(ArrayProxy<CommandBuffer::Handle> const& commands) -> void;
+        auto present() -> void;
+
+    public:
         inline operator VkDevice() const noexcept
         {
             return m_device;
@@ -39,10 +49,22 @@ namespace vk
             return m_allocator;
         }
 
+        inline auto getCommandBuffer() noexcept -> CommandBuffer&
+        {
+            return m_commandBuffers[m_imageIndex];
+        }
+
+        inline auto getSwapchainImage() noexcept -> Image&
+        {
+            return m_swapchainImages[m_imageIndex];
+        }
+
     private:
         auto createDevice(Instance& instance)    -> void;
         auto createAllocator(Instance& instance) -> void;
         auto createSwapchain()                   -> void;
+        auto createCommandBuffers()              -> void;
+        auto createSyncObjects()                 -> void;
 
     private:
         Surface*        m_surface;
@@ -51,7 +73,13 @@ namespace vk
         VkQueue         m_queue;
         VkSwapchainKHR  m_swapchain;
         VmaAllocator    m_allocator;
+        u32             m_imageIndex;
+        u32             m_frameIndex;
 
-        std::vector<Image> m_swapchainImages;
+        std::vector<VkSemaphore>   m_presentSemaphores;
+        std::vector<VkSemaphore>   m_renderSemaphores;
+        std::vector<VkFence>       m_fences;
+        std::vector<Image>         m_swapchainImages;
+        std::vector<CommandBuffer> m_commandBuffers;
     };
 }
