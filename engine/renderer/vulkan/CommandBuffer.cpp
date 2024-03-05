@@ -1,6 +1,7 @@
 #include "CommandBuffer.hpp"
 #include "Device.hpp"
 #include "Image.hpp"
+#include "Pipeline.hpp"
 #include <volk.h>
 #include <stdexcept>
 
@@ -74,7 +75,7 @@ auto vk::CommandBuffer::beginRendering(Image const& image) -> void
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .renderArea = {
                 .extent = { 
-                    .width = image.getWidth(),
+                    .width  = image.getWidth(),
                     .height = image.getHeight()
                 }
             },
@@ -174,6 +175,17 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
     }};
 
     vkCmdPipelineBarrier2(m_buffer, &dependency);
+    image.setLayout(layout);
+}
+
+auto vk::CommandBuffer::bindPipeline(Pipeline& pipeline) -> void
+{
+    vkCmdBindPipeline(m_buffer, static_cast<VkPipelineBindPoint>(pipeline.getBindPoint()), pipeline);
+}
+
+auto vk::CommandBuffer::draw(u32 vertexCount) -> void
+{
+    vkCmdDraw(m_buffer, vertexCount, 1, 0, 0);
 }
 
 auto vk::CommandBuffer::allocate(Device* pDevice) -> void

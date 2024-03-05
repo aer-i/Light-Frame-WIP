@@ -18,7 +18,7 @@ Window::Window()
         m_title.c_str(),
         static_cast<i32>(m_size.x),
         static_cast<i32>(m_size.y),
-        SDL_WINDOW_VULKAN
+        SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
     );
 
     if (!m_handle)

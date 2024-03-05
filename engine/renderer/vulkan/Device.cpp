@@ -3,7 +3,7 @@
 #include "Instance.hpp"
 #include "PhysicalDevice.hpp"
 #include "Surface.hpp"
-#include "Types.hpp"
+#include "Window.hpp"
 #include <volk.h>
 #include <vk_mem_alloc.h>
 #include <spdlog/spdlog.h>
@@ -16,7 +16,9 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
     , m_device{ nullptr }
     , m_queue{ nullptr }
     , m_swapchain{ nullptr }
+    , m_oldSwapchain{ nullptr }
     , m_allocator{ nullptr }
+    , m_surfaceFormat{ surface.getFormat(physicalDevice) }
     , m_frameIndex{ u32{} }
 {
     this->createDevice(instance);
@@ -30,8 +32,6 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
 
 vk::Device::~Device()
 {
-    vkDeviceWaitIdle(m_device);
-
     m_commandBuffers.clear();
     m_swapchainImages.clear();
 
@@ -98,14 +98,40 @@ auto vk::Device::operator=(Device&& other) -> Device&
     return *this;
 }
 
+auto vk::Device::waitIdle() -> void
+{
+    vkDeviceWaitIdle(m_device);
+}
+
+auto vk::Device::checkSwapchainState(Window &window) -> void
+{
+    static auto previousSize{ window.getSize() };
+
+    if (previousSize != window.getSize())
+    {
+        vkDeviceWaitIdle(m_device);
+        this->createSwapchain();
+    }
+}
+
 auto vk::Device::acquireImage() -> void
 {
     vkWaitForFences(m_device, 1, &m_fences[m_frameIndex], 0u, ~0ull);
     vkResetFences(m_device, 1, &m_fences[m_frameIndex]);
 
-    vkQueueWaitIdle(m_queue);
-
-    vkAcquireNextImageKHR(m_device, m_swapchain, ~0ull, m_renderSemaphores[m_frameIndex], nullptr, &m_imageIndex);
+    switch (vkAcquireNextImageKHR(m_device, m_swapchain, ~0ull, m_renderSemaphores[m_frameIndex], nullptr, &m_imageIndex))
+    {
+    case VK_SUCCESS:
+    case VK_SUBOPTIMAL_KHR:
+        break;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        vkDeviceWaitIdle(m_device);
+        this->createSwapchain();
+        break;
+    default:
+        throw std::runtime_error("Failed to acquire next swapchain images");
+        break;
+    }
 }
 
 auto vk::Device::submitCommands(ArrayProxy<CommandBuffer::Handle> const& commands) -> void
@@ -140,12 +166,21 @@ auto vk::Device::present() -> void
         .pImageIndices = &m_imageIndex
     }};
 
-    if (vkQueuePresentKHR(m_queue, &presentInfo))
+    switch (vkQueuePresentKHR(m_queue, &presentInfo))
     {
+    case VK_SUCCESS:
+        break;
+    case VK_SUBOPTIMAL_KHR:
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        vkDeviceWaitIdle(m_device);
+        this->createSwapchain();
+        break;
+    default:
         throw std::runtime_error("Failed to present frame");
+        break;
     }
 
-    m_frameIndex = (m_frameIndex + 1) % m_commandBuffers.size();
+    m_frameIndex = (m_frameIndex + 1) % m_imageCount;
 }
 
 auto vk::Device::createDevice(Instance& instance) -> void
@@ -283,7 +318,9 @@ auto vk::Device::createAllocator(Instance& instance) -> void
 
 auto vk::Device::createSwapchain() -> void
 {
-    auto format{ m_surface->getFormat(*m_physicalDevice) };
+    m_swapchainImages.clear();
+    m_surfaceFormat = m_surface->getFormat(*m_physicalDevice);
+
     auto extent{ m_surface->getExtent(*m_physicalDevice) };
     auto minImageCount{ m_surface->getClampedImageCount(*m_physicalDevice, 3u) };
     auto presentMode{ PresentMode::eFifo };
@@ -298,11 +335,13 @@ auto vk::Device::createSwapchain() -> void
         presentMode = PresentMode::eMailbox;
     }
 
+    m_oldSwapchain = m_swapchain;
+
     auto const swapchainCreateInfo{ VkSwapchainCreateInfoKHR{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = *m_surface,
         .minImageCount = minImageCount,
-        .imageFormat = static_cast<VkFormat>(format),
+        .imageFormat = static_cast<VkFormat>(m_surfaceFormat),
         .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .imageExtent = {.width = extent.width, .height = extent.height},
         .imageArrayLayers = 1u,
@@ -311,12 +350,19 @@ auto vk::Device::createSwapchain() -> void
         .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = static_cast<VkPresentModeKHR>(presentMode),
-        .clipped = 1u
+        .clipped = 1u,
+        .oldSwapchain = m_oldSwapchain
     }};
 
     if (vkCreateSwapchainKHR(m_device, &swapchainCreateInfo, nullptr, &m_swapchain))
     {
         throw std::runtime_error("Failed to create VkSwapchain");
+    }
+
+    if (m_oldSwapchain)
+    {
+        vkDestroySwapchainKHR(m_device, m_oldSwapchain, nullptr);
+        m_oldSwapchain = nullptr;
     }
 
     auto imageCount{ u32{} };
@@ -328,12 +374,13 @@ auto vk::Device::createSwapchain() -> void
 
     for (auto i{ imageCount }; i--; )
     {
-        m_swapchainImages[i].loadFromSwapchain(this, images[i], format, {extent.width, extent.height});
+        m_swapchainImages[i].loadFromSwapchain(this, images[i], m_surfaceFormat, {extent.width, extent.height});
     }
 }
 
 auto vk::Device::createCommandBuffers() -> void
 {
+    m_imageCount = static_cast<u32>(m_swapchainImages.size());
     m_commandBuffers = std::vector<CommandBuffer>{ m_swapchainImages.size() };
 
     for (auto& commandBuffer : m_commandBuffers)
@@ -348,7 +395,7 @@ auto vk::Device::createSyncObjects() -> void
     m_renderSemaphores  = std::vector<VkSemaphore>{ m_swapchainImages.size() };
     m_fences            = std::vector<VkFence>{ m_swapchainImages.size() };
 
-    for (auto i{ u32{} }; i < m_presentSemaphores.size(); ++i)
+    for (auto i{ m_presentSemaphores.size() }; i--; )
     {
         auto const semaphoreCreateInfo{ VkSemaphoreCreateInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO

@@ -62,6 +62,11 @@ auto vk::Surface::getFormat(PhysicalDevice& physicalDevice) -> Format
     auto availableFormats{ std::vector<VkSurfaceFormatKHR>{surfaceFormatCount} };
     vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, m_surface, &surfaceFormatCount, availableFormats.data());
 
+    if (availableFormats.empty())
+    {
+        throw std::runtime_error("No available surface formats");
+    }
+
     if (availableFormats.size() == 1 && availableFormats.front().format == VK_FORMAT_UNDEFINED)
     {
         return Format::eRGBA8_unorm;

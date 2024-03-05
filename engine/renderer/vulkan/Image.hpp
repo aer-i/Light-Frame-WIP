@@ -72,6 +72,11 @@ namespace vk
             return m_aspect;
         }
 
+        inline auto setLayout(ImageLayout layout) noexcept -> void
+        {
+            m_layout = layout;
+        }
+
     private:
         Device*         m_device;
         VkImage         m_image;

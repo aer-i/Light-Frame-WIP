@@ -3,6 +3,8 @@
 #include "CommandBuffer.hpp"
 #include "ArrayProxy.hpp"
 
+class Window;
+
 struct VkDevice_T;
 struct VkQueue_T;
 struct VkSwapchainKHR_T;
@@ -34,6 +36,8 @@ namespace vk
         auto operator=(Device const&)  -> Device& = delete;
 
     public:
+        auto waitIdle() -> void;
+        auto checkSwapchainState(Window& window) -> void;
         auto acquireImage() -> void;
         auto submitCommands(ArrayProxy<CommandBuffer::Handle> const& commands) -> void;
         auto present() -> void;
@@ -51,12 +55,17 @@ namespace vk
 
         inline auto getCommandBuffer() noexcept -> CommandBuffer&
         {
-            return m_commandBuffers[m_imageIndex];
+            return m_commandBuffers[m_frameIndex];
         }
 
         inline auto getSwapchainImage() noexcept -> Image&
         {
             return m_swapchainImages[m_imageIndex];
+        }
+
+        inline auto getSurfaceFormat() noexcept -> Format
+        {
+            return m_surfaceFormat;
         }
 
     private:
@@ -72,9 +81,12 @@ namespace vk
         VkDevice        m_device;
         VkQueue         m_queue;
         VkSwapchainKHR  m_swapchain;
+        VkSwapchainKHR  m_oldSwapchain;
         VmaAllocator    m_allocator;
+        Format          m_surfaceFormat;
         u32             m_imageIndex;
         u32             m_frameIndex;
+        u32             m_imageCount;
 
         std::vector<VkSemaphore>   m_presentSemaphores;
         std::vector<VkSemaphore>   m_renderSemaphores;

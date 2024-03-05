@@ -1,4 +1,5 @@
 #pragma once
+#include "Types.hpp"
 #include "VulkanEnums.hpp"
 
 struct VkCommandPool_T;
@@ -11,6 +12,7 @@ namespace vk
 {
     class Device;
     class Image;
+    class Pipeline;
 
     class CommandBuffer
     {
@@ -26,6 +28,8 @@ namespace vk
         auto beginRendering(Image const& image) -> void;
         auto endRendering() -> void;
         auto barrier(Image& image, ImageLayout layout) -> void;
+        auto bindPipeline(Pipeline& pipeline) -> void;
+        auto draw(u32 vertexCount) -> void;
         auto allocate(Device* pDevice) -> void;
 
     public:

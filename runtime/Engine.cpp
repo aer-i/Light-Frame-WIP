@@ -13,4 +13,6 @@ auto Engine::execute() -> void
 
         m_renderer.renderFrame();
     }
+
+    m_renderer.waitIdle();
 }

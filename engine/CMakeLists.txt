@@ -4,6 +4,7 @@ set(ENGINE_SOURCES
 "renderer/vulkan/PhysicalDevice.cpp"
 "renderer/vulkan/Device.cpp"
 "renderer/vulkan/CommandBuffer.cpp"
+"renderer/vulkan/Pipeline.cpp"
 "renderer/vulkan/Image.cpp"
 "renderer/Renderer.cpp"
 "renderer/Window.cpp"
