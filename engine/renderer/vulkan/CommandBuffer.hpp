@@ -33,6 +33,7 @@ namespace vk
         auto endPresent() -> void;
         auto beginRendering(Image const& image) -> void;
         auto endRendering() -> void;
+        auto pushConstant(const void* data, size_t size) -> void;
         auto copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void;
         auto barrier(Image& image, ImageLayout layout) -> void;
         auto setScissor(glm::ivec2 offset, glm::uvec2 size) -> void;
@@ -56,6 +57,7 @@ namespace vk
         struct M
         {
             Device*         device;
+            Pipeline*       currentPipeline;
             VkCommandPool   pool;
             VkCommandBuffer buffer;
         } m;

@@ -125,6 +125,11 @@ auto vk::CommandBuffer::endRendering() -> void
     vkCmdEndRendering(m.buffer);
 }
 
+auto vk::CommandBuffer::pushConstant(const void* data, size_t size) -> void
+{
+    vkCmdPushConstants(m.buffer, *m.currentPipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, size, data);
+}
+
 auto vk::CommandBuffer::copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void
 {
     auto const copy{ VkBufferCopy{
@@ -227,6 +232,7 @@ auto vk::CommandBuffer::bindIndexBuffer32(Buffer& indexBuffer) -> void
 
 auto vk::CommandBuffer::bindPipeline(Pipeline& pipeline) -> void
 {
+    m.currentPipeline = &pipeline;
     vkCmdBindPipeline(m.buffer, static_cast<VkPipelineBindPoint>(pipeline.getBindPoint()), pipeline);
 
     auto const set{ VkDescriptorSet{pipeline} };

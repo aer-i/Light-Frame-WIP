@@ -105,10 +105,18 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
         }
     }
     {
+        auto const pushConstantRange{ VkPushConstantRange{
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .offset = 0,
+            .size = 128
+        }};
+
         auto const layoutCreateInfo { VkPipelineLayoutCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .setLayoutCount = m.set ? 1u : 0u,
-            .pSetLayouts = m.set ? &m.setLayout : nullptr
+            .pSetLayouts = m.set ? &m.setLayout : nullptr,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &pushConstantRange
         }};
 
         if (vkCreatePipelineLayout(*m.device, &layoutCreateInfo, nullptr, &m.layout))
@@ -175,7 +183,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .lineWidth = 1.0f,
         }};
 
-        auto const mulisampleStateCreateInfo{ VkPipelineMultisampleStateCreateInfo{
+        auto const multisampleStateCreateInfo{ VkPipelineMultisampleStateCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
             .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
         }};
@@ -229,7 +237,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .pInputAssemblyState = &inputAssemblyStateCreateInfo,
             .pViewportState = &viewportStateCreateInfo,
             .pRasterizationState = &rasterizationStateCreateInfo,
-            .pMultisampleState = &mulisampleStateCreateInfo,
+            .pMultisampleState = &multisampleStateCreateInfo,
             .pDepthStencilState = &depthStencilStateCreateInfo,
             .pColorBlendState = &colorBlendStateCreateInfo,
             .pDynamicState = &dynamicStateCreateInfo,
@@ -271,14 +279,14 @@ vk::Pipeline::~Pipeline()
 }
 
 vk::Pipeline::Pipeline(Pipeline&& other)
-    : m{ std::move(other.m) }
+    : m{ other.m }
 {
     other.m = {};
 }
 
 auto vk::Pipeline::operator=(Pipeline&& other) -> Pipeline&
 {
-    m = std::move(other.m);
+    m = other.m;
     other.m = {};
 
     return *this;

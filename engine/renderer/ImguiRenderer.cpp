@@ -25,7 +25,7 @@ ImguiRenderer::ImguiRenderer(Window& window,vk::Device& device)
     m.vertexBuffer = vk::Buffer{ m.device, vertexBufferSize, vk::BufferUsage::eStorageBuffer, vk::MemoryType::eHost };
     m.indexBuffer  = vk::Buffer{ m.device, indexBufferSize,  vk::BufferUsage::eIndexBuffer,   vk::MemoryType::eHost };
 
-    auto fontData{ (u8*){} };
+    auto fontData{ (u8*)(nullptr) };
     auto texWidth{ i32{} }, texHeight{ i32{} };
 
     io.Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
@@ -97,9 +97,14 @@ auto ImguiRenderer::renderGui(vk::CommandBuffer& commands) -> void
         newFrame();
         return;
     }
+    auto const scale{ glm::vec2{
+        2.f / imDrawData->DisplaySize.x,
+        2.f / imDrawData->DisplaySize.y * -1
+    }};
 
     commands.bindPipeline(m.pipeline);
     commands.bindIndexBuffer16(m.indexBuffer);
+    commands.pushConstant(&scale, sizeof(scale));
 
     for (auto cmdList : imDrawData->CmdLists)
     {

@@ -104,6 +104,7 @@ auto vk::Device::checkSwapchainState(Window &window) -> void
     {
         vkDeviceWaitIdle(m.device);
         this->createSwapchain();
+        previousSize = window.getSize();
     }
 }
 
