@@ -7,7 +7,7 @@
 #include <stdexcept>
 
 vk::PhysicalDevice::PhysicalDevice(Instance& instance)
-    : m_physicalDevice{ nullptr }
+    : m{}
 {
     auto vulkan_1_3Features{ VkPhysicalDeviceVulkan13Features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES} };
     auto meshShaderFeatures{ VkPhysicalDeviceMeshShaderFeaturesEXT{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT} };
@@ -38,12 +38,12 @@ vk::PhysicalDevice::PhysicalDevice(Instance& instance)
         if (!vulkan_1_3Features.synchronization2)                  continue;
         if (!vulkan_1_3Features.dynamicRendering)                  continue;
 
-        m_physicalDevice = currentPhysicalDevice;
+        m.physicalDevice = currentPhysicalDevice;
 
         if (meshShaderFeatures.meshShader) break;
     }
 
-    if (!m_physicalDevice)
+    if (!m.physicalDevice)
     {
         throw std::runtime_error("Could not find any suitable graphics card. Make sure you have installed the latest drivers");
     }
@@ -64,16 +64,15 @@ vk::PhysicalDevice::PhysicalDevice(Instance& instance)
 }
 
 vk::PhysicalDevice::PhysicalDevice(PhysicalDevice&& other)
-    : m_physicalDevice{ other.m_physicalDevice }
+    : m{ std::move(other.m) }
 {
-    other.m_physicalDevice = nullptr;
+    other.m = {};
 }
 
 auto vk::PhysicalDevice::operator=(PhysicalDevice&& other) -> PhysicalDevice&
 {
-    m_physicalDevice = other.m_physicalDevice;
-
-    other.m_physicalDevice = nullptr;
+    m = std::move(other.m);
+    other.m = {};
 
     return *this;
 }

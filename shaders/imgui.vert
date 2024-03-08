@@ -1,12 +1,8 @@
 #version 460
-#extension GL_EXT_shader_16bit_storage : require
 
 struct Vertex{ float x, y, u, v; uint color; };
-struct Draw{ uint io, vo; };
 
-layout(std430, binding = 0) buffer VertexBuffer{ Vertex   vertices[]; };
-layout(std430, binding = 1) buffer IndexBuffer { uint16_t indices[];  };
-layout(std430, binding = 3) buffer OffsetBuffer { Draw draws[]; };
+layout(std430, binding = 0) buffer VertexBuffer{ Vertex vertices[]; };
 
 layout(location = 0) out vec2 outUv;
 layout(location = 1) out vec4 outColor;
@@ -25,9 +21,7 @@ const mat4 proj = mat4(
 
 void main()
 {
-    Draw dd = draws[gl_InstanceIndex];
-
-    Vertex v = vertices[uint(indices[gl_VertexIndex + dd.io]) + dd.vo];
+    Vertex v = vertices[gl_VertexIndex];
 
     outUv = vec2(v.u, v.v);
     outColor = unpackUnorm4x8(v.color);

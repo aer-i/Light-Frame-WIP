@@ -1,18 +1,19 @@
 #include "Engine.hpp"
 
 Engine::Engine()
-    : m_window{ }
-    , m_renderer{ m_window }
+    : m{
+        .renderer = Renderer{ m.window }
+    }
 {}
 
 auto Engine::execute() -> void
 {
-    while (m_window.available())
+    while (m.window.available())
     {
-        m_window.update();
+        m.window.update();
 
-        m_renderer.renderFrame();
+        m.renderer.renderFrame();
     }
 
-    m_renderer.waitIdle();
+    m.renderer.waitIdle();
 }

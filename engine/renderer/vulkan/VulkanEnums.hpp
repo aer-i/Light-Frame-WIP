@@ -3,6 +3,7 @@
 namespace vk
 {
     using ImageUsageFlags  = unsigned;
+    using BufferUsageFlags = unsigned;
     using AspectFlags      = unsigned;
     using ShaderStageFlags = unsigned;
 
@@ -56,18 +57,34 @@ namespace vk
         eStorageBuffer        = 0x00000007
     };
 
+    enum class MemoryType : unsigned
+    {
+        eHost     = 0x00000000,
+        eHostOnly = 0x00000001,
+        eDevice   = 0x00000002
+    };
+
     namespace ImageUsage
     {
         enum : unsigned
         {
-            eTransferSrc     = 0x00000001,
-            eTransferDst     = 0x00000002,
             eSampled         = 0x00000004,
             eStorage         = 0x00000008,
             eColorAttachment = 0x00000010,
             eDepthAttachment = 0x00000020
         };
     }
+
+    namespace BufferUsage
+    {
+        enum : unsigned
+        {
+            eUniformBuffer  = 0x00000010,
+            eStorageBuffer  = 0x00000020,
+            eIndexBuffer    = 0x00000040,
+            eIndirectBuffer = 0x00000100
+        };
+    };
 
     namespace Aspect
     {

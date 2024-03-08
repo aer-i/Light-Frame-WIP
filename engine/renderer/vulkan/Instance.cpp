@@ -20,9 +20,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 
 vk::Instance::Instance(bool validationLayersEnabled)
-    : m_instance{ nullptr }
-    , m_debugMessenger{ nullptr }
-    , m_apiVersion{ 0u }
+    : m{}
 {
     if (volkInitialize())
     {
@@ -37,7 +35,7 @@ vk::Instance::Instance(bool validationLayersEnabled)
     auto extensions{ std::vector<char const*>{extensionNames, extensionNames + extensionCount} };
     auto layers    { std::vector<char const*>{} };
 
-    if (vkEnumerateInstanceVersion(&m_apiVersion))
+    if (vkEnumerateInstanceVersion(&m.apiVersion))
     {
         throw std::runtime_error("Failed to enumerate instance version");
     }
@@ -63,7 +61,7 @@ vk::Instance::Instance(bool validationLayersEnabled)
         .applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
         .pEngineName = "Light Frame",
         .engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
-        .apiVersion = m_apiVersion
+        .apiVersion = m.apiVersion
     }};
 
     auto const instanceCreateInfo{ VkInstanceCreateInfo{
@@ -76,12 +74,12 @@ vk::Instance::Instance(bool validationLayersEnabled)
         .ppEnabledExtensionNames = extensions.data()
     }};
 
-    if (vkCreateInstance(&instanceCreateInfo, nullptr, &m_instance))
+    if (vkCreateInstance(&instanceCreateInfo, nullptr, &m.instance))
     {
         throw std::runtime_error("Failed to create VkInstance");
     }
 
-    volkLoadInstanceOnly(m_instance);
+    volkLoadInstanceOnly(m.instance);
 
     if (validationLayersEnabled)
     {
@@ -97,7 +95,7 @@ vk::Instance::Instance(bool validationLayersEnabled)
             .pfnUserCallback = &debugCallback
         }};
 
-        if (vkCreateDebugUtilsMessengerEXT(m_instance, &debugMessengerCreateInfo, nullptr, &m_debugMessenger))
+        if (vkCreateDebugUtilsMessengerEXT(m.instance, &debugMessengerCreateInfo, nullptr, &m.debugMessenger))
         {
             throw std::runtime_error("Failed to create debug utils messenger");
         }
@@ -106,9 +104,9 @@ vk::Instance::Instance(bool validationLayersEnabled)
     spdlog::info("Created instance");
     spdlog::info(
         "Instance API version [ {}.{}.{} ]",
-        VK_VERSION_MAJOR(m_apiVersion),
-        VK_VERSION_MINOR(m_apiVersion),
-        VK_VERSION_PATCH(m_apiVersion)
+        VK_VERSION_MAJOR(m.apiVersion),
+        VK_VERSION_MINOR(m.apiVersion),
+        VK_VERSION_PATCH(m.apiVersion)
     );
     spdlog::info("Enabled instance extenstions:");
 
@@ -127,40 +125,31 @@ vk::Instance::Instance(bool validationLayersEnabled)
 
 vk::Instance::~Instance()
 {
-    if (m_debugMessenger)
+    if (m.debugMessenger)
     {
-        vkDestroyDebugUtilsMessengerEXT(m_instance, m_debugMessenger, nullptr);
-        m_debugMessenger = nullptr;
+        vkDestroyDebugUtilsMessengerEXT(m.instance, m.debugMessenger, nullptr);
     }
 
-    if (m_instance)
+    if (m.instance)
     {
-        vkDestroyInstance(m_instance, nullptr);
-        m_instance = nullptr;
+        vkDestroyInstance(m.instance, nullptr);
     }
+
+    m = {};
 
     spdlog::info("Destroyed instance");
 }
 
 vk::Instance::Instance(Instance&& other)
-    : m_instance{ other.m_instance }
-    , m_debugMessenger{ other.m_debugMessenger }
-    , m_apiVersion{ other.m_apiVersion }
+    : m{ std::move(other.m) }
 {
-    other.m_debugMessenger = nullptr;
-    other.m_instance       = nullptr;
-    other.m_apiVersion     = 0;
+    other.m = {};
 }
 
 auto vk::Instance::operator=(Instance&& other) -> Instance&
 {
-    this->m_instance       = other.m_instance;
-    this->m_debugMessenger = other.m_debugMessenger;
-    this->m_apiVersion     = other.m_apiVersion;
-
-    other.m_debugMessenger = nullptr;
-    other.m_instance       = nullptr;
-    other.m_apiVersion     = 0;
+    m = std::move(other.m);
+    other.m = {};
 
     return *this;
 }

@@ -11,6 +11,10 @@ class Window
 public:
     Window();
     ~Window();
+    Window(Window const&) = delete;
+    Window(Window&&) = delete;
+    auto operator=(Window const&) -> Window& = delete;
+    auto operator=(Window&&) -> Window& = delete;
 
     auto update()                          -> void;
     auto setTitle(std::string_view title)  -> void;
@@ -24,34 +28,37 @@ public:
     auto getButtonUp(i32 button)           -> bool;
     auto getTime()                         -> f64;
 
-    inline auto getDeltaTime()     -> const f32          { return m_deltaTime;   }
-    inline auto getHandle()        -> const SDL_Window*  { return m_handle;      }
-    inline auto getSize()          -> const glm::ivec2&  { return m_size;        }
-    inline auto getWidth()         -> const i32          { return m_size.x;      }
-    inline auto getHeight()        -> const i32          { return m_size.y;      }
-    inline auto getTile()          -> const std::string& { return m_title;       }
-    inline auto getPos()           -> const glm::ivec2&  { return m_pos;         }
-    inline auto getPosX()          -> const i32          { return m_pos.x;       }
-    inline auto getPosY()          -> const i32          { return m_pos.y;       }
-    inline auto getCursorPos()     -> const glm::vec2&   { return m_cursorPos;   }
-    inline auto getCursorX()       -> const f32          { return m_cursorPos.x; }
-    inline auto getCursorY()       -> const f32          { return m_cursorPos.y; }
-    inline auto getCursorOffset()  -> const glm::vec2&   { return m_cursorOff;   }
-    inline auto getCursorOffsetX() -> const f32          { return m_cursorOff.x; }
-    inline auto getCursorOffsetY() -> const f32          { return m_cursorOff.y; }
-    inline auto available()        -> const bool         { return m_available;   }
+    inline auto getDeltaTime()     -> const f32          { return m.deltaTime;   }
+    inline auto getHandle()        -> const SDL_Window*  { return m.handle;      }
+    inline auto getSize()          -> const glm::ivec2&  { return m.size;        }
+    inline auto getWidth()         -> const i32          { return m.size.x;      }
+    inline auto getHeight()        -> const i32          { return m.size.y;      }
+    inline auto getTile()          -> const std::string& { return m.title;       }
+    inline auto getPos()           -> const glm::ivec2&  { return m.pos;         }
+    inline auto getPosX()          -> const i32          { return m.pos.x;       }
+    inline auto getPosY()          -> const i32          { return m.pos.y;       }
+    inline auto getCursorPos()     -> const glm::vec2&   { return m.cursorPos;   }
+    inline auto getCursorX()       -> const f32          { return m.cursorPos.x; }
+    inline auto getCursorY()       -> const f32          { return m.cursorPos.y; }
+    inline auto getCursorOffset()  -> const glm::vec2&   { return m.cursorOff;   }
+    inline auto getCursorOffsetX() -> const f32          { return m.cursorOff.x; }
+    inline auto getCursorOffsetY() -> const f32          { return m.cursorOff.y; }
+    inline auto available()        -> const bool         { return m.available;   }
 
 private:
-    SDL_Window* m_handle        = nullptr;
-    glm::ivec2  m_size          = glm::ivec2(1280, 720);
-    glm::ivec2  m_pos           = glm::ivec2(50, 50);
-    glm::vec2   m_cursorPos     = glm::vec2(0, 0);
-    glm::vec2   m_cursorOff     = glm::vec2(0, 0);
-    glm::vec2   m_globCursorPos = glm::vec2(0, 0);
-    std::string m_title         = "Light Frame";
-    f32         m_deltaTime     = f32(0.f);
-    u8*         m_keyboardState = nullptr;
-    bool        m_available     = bool(true);
+    struct M
+    {
+        SDL_Window* handle;
+        glm::ivec2  size;
+        glm::ivec2  pos;
+        glm::vec2   cursorPos;
+        glm::vec2   cursorOff;
+        glm::vec2   globCursorPos;
+        std::string title;
+        f32         deltaTime;
+        u8*         keyboardState;
+        bool        available;
+    } m;
 };
 
 namespace key

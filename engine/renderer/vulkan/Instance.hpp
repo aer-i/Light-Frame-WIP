@@ -22,17 +22,20 @@ namespace vk
     public:
         inline operator VkInstance() const noexcept
         {
-            return m_instance;
+            return m.instance;
         }
 
         inline auto apiVersion() const noexcept -> unsigned int
         {
-            return m_apiVersion;
+            return m.apiVersion;
         }
 
     private:
-        VkInstance               m_instance;
-        VkDebugUtilsMessengerEXT m_debugMessenger;
-        unsigned int             m_apiVersion;
+        struct M
+        {
+            VkInstance               instance;
+            VkDebugUtilsMessengerEXT debugMessenger;
+            unsigned int             apiVersion;
+        } m;
     };
 }

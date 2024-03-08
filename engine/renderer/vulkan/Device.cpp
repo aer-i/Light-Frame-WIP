@@ -11,96 +11,89 @@
 #include <stdexcept>
 
 vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physicalDevice)
-    : m_surface{ &surface }
-    , m_physicalDevice{ &physicalDevice }
-    , m_device{ nullptr }
-    , m_queue{ nullptr }
-    , m_swapchain{ nullptr }
-    , m_oldSwapchain{ nullptr }
-    , m_allocator{ nullptr }
-    , m_surfaceFormat{ surface.getFormat(physicalDevice) }
-    , m_frameIndex{ u32{} }
+    : m{ 
+        .surface = &surface,
+        .physicalDevice = &physicalDevice,
+        .surfaceFormat = surface.getFormat(physicalDevice)
+    }
 {
     this->createDevice(instance);
     this->createAllocator(instance);
     this->createSwapchain();
     this->createCommandBuffers();
     this->createSyncObjects();
+    this->createTransferResources();
+    this->createDescriptorPool();
+    this->createSampler();
     
     spdlog::info("Created device");
 }
 
 vk::Device::~Device()
 {
-    m_commandBuffers.clear();
-    m_swapchainImages.clear();
+    m.transferCommandBuffer.~CommandBuffer();
+    m.commandBuffers.clear();
+    m.swapchainImages.clear();
 
-    for (auto i{ static_cast<u32>(m_fences.size()) }; i--; )
+    if (m.sampler)
     {
-        vkDestroyFence(m_device, m_fences[i], nullptr);
-        vkDestroySemaphore(m_device, m_presentSemaphores[i], nullptr);
-        vkDestroySemaphore(m_device, m_renderSemaphores[i], nullptr);
+        vkDestroySampler(m.device, m.sampler, nullptr);
     }
 
-    if (m_swapchain)
+    if (m.descriptorPool)
     {
-        vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-        m_swapchain = nullptr;
+        vkDestroyDescriptorPool(m.device, m.descriptorPool, nullptr);
     }
 
-    if (m_allocator)
+    if (m.transferFence)
     {
-        vmaDestroyAllocator(m_allocator);
-        m_allocator = nullptr;
+        vkDestroyFence(m.device, m.transferFence, nullptr);
     }
 
-    if (m_device)
+    for (auto i{ static_cast<u32>(m.fences.size()) }; i--; )
     {
-        vkDestroyDevice(m_device, nullptr);
-        m_device = nullptr;
+        vkDestroyFence(m.device, m.fences[i], nullptr);
+        vkDestroySemaphore(m.device, m.presentSemaphores[i], nullptr);
+        vkDestroySemaphore(m.device, m.renderSemaphores[i], nullptr);
     }
+
+    if (m.swapchain)
+    {
+        vkDestroySwapchainKHR(m.device, m.swapchain, nullptr);
+    }
+
+    if (m.allocator)
+    {
+        vmaDestroyAllocator(m.allocator);
+    }
+
+    if (m.device)
+    {
+        vkDestroyDevice(m.device, nullptr);
+    }
+
+    m = {};
 
     spdlog::info("Destroyed device");
 }
 
 vk::Device::Device(Device&& other)
-    : m_surface{ other.m_surface }
-    , m_physicalDevice{ other.m_physicalDevice }
-    , m_device{ other.m_device }
-    , m_queue{ other.m_queue }
-    , m_swapchain{ other.m_swapchain }
-    , m_allocator{ other.m_allocator }
+    : m{ std::move(other.m) }
 {
-    other.m_surface        = nullptr;
-    other.m_physicalDevice = nullptr;
-    other.m_device         = nullptr;
-    other.m_queue          = nullptr;
-    other.m_swapchain      = nullptr;
-    other.m_allocator      = nullptr;
+    other.m = {};
 }
 
 auto vk::Device::operator=(Device&& other) -> Device&
 {
-    m_surface         = other.m_surface;
-    m_physicalDevice  = other.m_physicalDevice;
-    m_device          = other.m_device;
-    m_queue           = other.m_queue;
-    m_swapchain       = other.m_swapchain;
-    m_allocator       = other.m_allocator;
-
-    other.m_surface        = nullptr;
-    other.m_physicalDevice = nullptr;
-    other.m_device         = nullptr;
-    other.m_queue          = nullptr;
-    other.m_swapchain      = nullptr;
-    other.m_allocator      = nullptr;
+    m = std::move(other.m);
+    other.m = {};
 
     return *this;
 }
 
 auto vk::Device::waitIdle() -> void
 {
-    vkDeviceWaitIdle(m_device);
+    vkDeviceWaitIdle(m.device);
 }
 
 auto vk::Device::checkSwapchainState(Window &window) -> void
@@ -109,23 +102,23 @@ auto vk::Device::checkSwapchainState(Window &window) -> void
 
     if (previousSize != window.getSize())
     {
-        vkDeviceWaitIdle(m_device);
+        vkDeviceWaitIdle(m.device);
         this->createSwapchain();
     }
 }
 
 auto vk::Device::acquireImage() -> void
 {
-    vkWaitForFences(m_device, 1, &m_fences[m_frameIndex], 0u, ~0ull);
-    vkResetFences(m_device, 1, &m_fences[m_frameIndex]);
+    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
+    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
 
-    switch (vkAcquireNextImageKHR(m_device, m_swapchain, ~0ull, m_renderSemaphores[m_frameIndex], nullptr, &m_imageIndex))
+    switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
     {
     case VK_SUCCESS:
     case VK_SUBOPTIMAL_KHR:
         break;
     case VK_ERROR_OUT_OF_DATE_KHR:
-        vkDeviceWaitIdle(m_device);
+        vkDeviceWaitIdle(m.device);
         this->createSwapchain();
         break;
     default:
@@ -141,15 +134,15 @@ auto vk::Device::submitCommands(ArrayProxy<CommandBuffer::Handle> const& command
     auto const submitInfo{ VkSubmitInfo{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &m_renderSemaphores[m_frameIndex],
+        .pWaitSemaphores = &m.renderSemaphores[m.frameIndex],
         .pWaitDstStageMask = &waitStage,
         .commandBufferCount = commands.size(),
         .pCommandBuffers = commands.data(),
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &m_presentSemaphores[m_frameIndex]
+        .pSignalSemaphores = &m.presentSemaphores[m.frameIndex]
     }};
 
-    if (vkQueueSubmit(m_queue, 1, &submitInfo, m_fences[m_frameIndex]))
+    if (vkQueueSubmit(m.queue, 1, &submitInfo, m.fences[m.frameIndex]))
     {
         throw std::runtime_error("Failed to submit command buffers");
     }
@@ -160,19 +153,19 @@ auto vk::Device::present() -> void
     auto const presentInfo{ VkPresentInfoKHR{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &m_presentSemaphores[m_frameIndex],
+        .pWaitSemaphores = &m.presentSemaphores[m.frameIndex],
         .swapchainCount = 1,
-        .pSwapchains = &m_swapchain,
-        .pImageIndices = &m_imageIndex
+        .pSwapchains = &m.swapchain,
+        .pImageIndices = &m.imageIndex
     }};
 
-    switch (vkQueuePresentKHR(m_queue, &presentInfo))
+    switch (vkQueuePresentKHR(m.queue, &presentInfo))
     {
     case VK_SUCCESS:
         break;
     case VK_SUBOPTIMAL_KHR:
     case VK_ERROR_OUT_OF_DATE_KHR:
-        vkDeviceWaitIdle(m_device);
+        vkDeviceWaitIdle(m.device);
         this->createSwapchain();
         break;
     default:
@@ -180,15 +173,40 @@ auto vk::Device::present() -> void
         break;
     }
 
-    m_frameIndex = (m_frameIndex + 1) % m_imageCount;
+    m.frameIndex = (m.frameIndex + 1) % m.imageCount;
+}
+
+auto vk::Device::transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void
+{
+    vkResetFences(m.device, 1, &m.transferFence);
+
+    m.transferCommandBuffer.begin();
+    {
+        function(m.transferCommandBuffer);
+    }
+    m.transferCommandBuffer.end();
+
+    auto const command{ VkCommandBuffer{m.transferCommandBuffer} };
+    auto const submitInfo{ VkSubmitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command
+    }};
+
+    if (vkQueueSubmit(m.queue, 1, &submitInfo, m.transferFence))
+    {
+        throw std::runtime_error("Failed to submit command buffers");
+    }
+
+    vkWaitForFences(m.device, 1, &m.transferFence, 0, ~0ull);
 }
 
 auto vk::Device::createDevice(Instance& instance) -> void
 {
     auto propertyCount{ u32{} };
-    vkGetPhysicalDeviceQueueFamilyProperties(*m_physicalDevice, &propertyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(*m.physicalDevice, &propertyCount, nullptr);
     auto properties{ std::vector<VkQueueFamilyProperties>{propertyCount} };
-    vkGetPhysicalDeviceQueueFamilyProperties(*m_physicalDevice, &propertyCount, properties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(*m.physicalDevice, &propertyCount, properties.data());
 
     auto family{ u32{} };
     auto index { u32{} };
@@ -196,7 +214,7 @@ auto vk::Device::createDevice(Instance& instance) -> void
     for (auto i{ u32{} }; i < propertyCount; ++i)
     {
         auto presentSupport{ VkBool32{false} };
-        vkGetPhysicalDeviceSurfaceSupportKHR(*m_physicalDevice, i, *m_surface, &presentSupport);
+        vkGetPhysicalDeviceSurfaceSupportKHR(*m.physicalDevice, i, *m.surface, &presentSupport);
 
         if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT &&
             properties[i].queueFlags & VK_QUEUE_COMPUTE_BIT &&
@@ -259,14 +277,14 @@ auto vk::Device::createDevice(Instance& instance) -> void
         .ppEnabledExtensionNames = &swapchainExtension
     }};
 
-    if (vkCreateDevice(*m_physicalDevice, &deviceCreateInfo, nullptr, &m_device))
+    if (vkCreateDevice(*m.physicalDevice, &deviceCreateInfo, nullptr, &m.device))
     {
         throw std::runtime_error("Failed to create VkDevice");
     }
 
-    volkLoadDevice(m_device);
+    volkLoadDevice(m.device);
 
-    vkGetDeviceQueue(m_device, family, index, &m_queue);
+    vkGetDeviceQueue(m.device, family, index, &m.queue);
 
     spdlog::info("Graphics queue [ family: {}; index: {} ]", family, index);
 }
@@ -303,14 +321,14 @@ auto vk::Device::createAllocator(Instance& instance) -> void
     }};
 
     auto const allocatorCreateInfo{ VmaAllocatorCreateInfo{
-        .physicalDevice = *m_physicalDevice,
-        .device = m_device,
+        .physicalDevice = *m.physicalDevice,
+        .device = m.device,
         .pVulkanFunctions = &functions,
         .instance = instance,
         .vulkanApiVersion = instance.apiVersion(),
     }};
 
-    if (vmaCreateAllocator(&allocatorCreateInfo, &m_allocator))
+    if (vmaCreateAllocator(&allocatorCreateInfo, &m.allocator))
     {
         throw std::runtime_error("Failed to create vulkan memory allocator");
     }
@@ -318,30 +336,30 @@ auto vk::Device::createAllocator(Instance& instance) -> void
 
 auto vk::Device::createSwapchain() -> void
 {
-    m_swapchainImages.clear();
-    m_surfaceFormat = m_surface->getFormat(*m_physicalDevice);
+    m.swapchainImages.clear();
+    m.surfaceFormat = m.surface->getFormat(*m.physicalDevice);
 
-    auto extent{ m_surface->getExtent(*m_physicalDevice) };
-    auto minImageCount{ m_surface->getClampedImageCount(*m_physicalDevice, 3u) };
+    auto extent{ m.surface->getExtent(*m.physicalDevice) };
+    auto minImageCount{ m.surface->getClampedImageCount(*m.physicalDevice, 3u) };
     auto presentMode{ PresentMode::eFifo };
 
-    if (m_surface->presentModeSupport(*m_physicalDevice, PresentMode::eImmediate))
+    if (m.surface->presentModeSupport(*m.physicalDevice, PresentMode::eImmediate))
     {
         presentMode = PresentMode::eImmediate;
     }
 
-    if (m_surface->presentModeSupport(*m_physicalDevice, PresentMode::eMailbox))
+    if (m.surface->presentModeSupport(*m.physicalDevice, PresentMode::eMailbox))
     {
         presentMode = PresentMode::eMailbox;
     }
 
-    m_oldSwapchain = m_swapchain;
+    m.oldSwapchain = m.swapchain;
 
     auto const swapchainCreateInfo{ VkSwapchainCreateInfoKHR{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = *m_surface,
+        .surface = *m.surface,
         .minImageCount = minImageCount,
-        .imageFormat = static_cast<VkFormat>(m_surfaceFormat),
+        .imageFormat = static_cast<VkFormat>(m.surfaceFormat),
         .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .imageExtent = {.width = extent.width, .height = extent.height},
         .imageArrayLayers = 1u,
@@ -351,39 +369,39 @@ auto vk::Device::createSwapchain() -> void
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = static_cast<VkPresentModeKHR>(presentMode),
         .clipped = 1u,
-        .oldSwapchain = m_oldSwapchain
+        .oldSwapchain = m.oldSwapchain
     }};
 
-    if (vkCreateSwapchainKHR(m_device, &swapchainCreateInfo, nullptr, &m_swapchain))
+    if (vkCreateSwapchainKHR(m.device, &swapchainCreateInfo, nullptr, &m.swapchain))
     {
         throw std::runtime_error("Failed to create VkSwapchain");
     }
 
-    if (m_oldSwapchain)
+    if (m.oldSwapchain)
     {
-        vkDestroySwapchainKHR(m_device, m_oldSwapchain, nullptr);
-        m_oldSwapchain = nullptr;
+        vkDestroySwapchainKHR(m.device, m.oldSwapchain, nullptr);
+        m.oldSwapchain = nullptr;
     }
 
     auto imageCount{ u32{} };
-    vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, nullptr);
+    vkGetSwapchainImagesKHR(m.device, m.swapchain, &imageCount, nullptr);
     auto images{ std::vector<VkImage>{imageCount} };
-    vkGetSwapchainImagesKHR(m_device, m_swapchain, &imageCount, images.data());
+    vkGetSwapchainImagesKHR(m.device, m.swapchain, &imageCount, images.data());
 
-    m_swapchainImages = std::vector<Image>{ imageCount };
+    m.swapchainImages = std::vector<Image>{ imageCount };
 
     for (auto i{ imageCount }; i--; )
     {
-        m_swapchainImages[i].loadFromSwapchain(this, images[i], m_surfaceFormat, {extent.width, extent.height});
+        m.swapchainImages[i].loadFromSwapchain(this, images[i], m.surfaceFormat, {extent.width, extent.height});
     }
 }
 
 auto vk::Device::createCommandBuffers() -> void
 {
-    m_imageCount = static_cast<u32>(m_swapchainImages.size());
-    m_commandBuffers = std::vector<CommandBuffer>{ m_swapchainImages.size() };
+    m.imageCount = static_cast<u32>(m.swapchainImages.size());
+    m.commandBuffers = std::vector<CommandBuffer>{ m.swapchainImages.size() };
 
-    for (auto& commandBuffer : m_commandBuffers)
+    for (auto& commandBuffer : m.commandBuffers)
     {
         commandBuffer.allocate(this);
     }
@@ -391,11 +409,11 @@ auto vk::Device::createCommandBuffers() -> void
 
 auto vk::Device::createSyncObjects() -> void
 {
-    m_presentSemaphores = std::vector<VkSemaphore>{ m_swapchainImages.size() };
-    m_renderSemaphores  = std::vector<VkSemaphore>{ m_swapchainImages.size() };
-    m_fences            = std::vector<VkFence>{ m_swapchainImages.size() };
+    m.presentSemaphores = std::vector<VkSemaphore>{ m.swapchainImages.size() };
+    m.renderSemaphores  = std::vector<VkSemaphore>{ m.swapchainImages.size() };
+    m.fences            = std::vector<VkFence>{ m.swapchainImages.size() };
 
-    for (auto i{ m_presentSemaphores.size() }; i--; )
+    for (auto i{ m.presentSemaphores.size() }; i--; )
     {
         auto const semaphoreCreateInfo{ VkSemaphoreCreateInfo{
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
@@ -406,15 +424,69 @@ auto vk::Device::createSyncObjects() -> void
             .flags = VK_FENCE_CREATE_SIGNALED_BIT
         }};
 
-        if (vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_presentSemaphores[i]) ||
-            vkCreateSemaphore(m_device, &semaphoreCreateInfo, nullptr, &m_renderSemaphores[i]))
+        if (vkCreateSemaphore(m.device, &semaphoreCreateInfo, nullptr, &m.presentSemaphores[i]) ||
+            vkCreateSemaphore(m.device, &semaphoreCreateInfo, nullptr, &m.renderSemaphores[i]))
         {
             throw std::runtime_error("Failed to create VkSemaphore");
         }
 
-        if (vkCreateFence(m_device, &fenceCreateInfo, nullptr, &m_fences[i]))
+        if (vkCreateFence(m.device, &fenceCreateInfo, nullptr, &m.fences[i]))
         {
             throw std::runtime_error("Failed to create VkFence");
         }
+    }
+}
+
+auto vk::Device::createTransferResources() -> void
+{
+    m.transferCommandBuffer.allocateForTransfers(this);
+
+    auto const fenceCreateInfo{ VkFenceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO
+    }};
+
+    if (vkCreateFence(m.device, &fenceCreateInfo, nullptr, &m.transferFence))
+    {
+        throw std::runtime_error("Failed to create VkFence");
+    }
+}
+
+auto vk::Device::createDescriptorPool() -> void
+{
+    auto const poolSizes{ std::array{
+        VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         .descriptorCount = 1024 * 64 },
+        VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         .descriptorCount = 1024 * 64 },
+        VkDescriptorPoolSize{ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1024 * 64 }
+    }};
+
+    auto const descriptorPoolCreateInfo{ VkDescriptorPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+        .maxSets = 1024,
+        .poolSizeCount = static_cast<u32>(poolSizes.size()),
+        .pPoolSizes = poolSizes.data()
+    }};
+
+    if (vkCreateDescriptorPool(m.device, &descriptorPoolCreateInfo, nullptr, &m.descriptorPool))
+    {
+        throw std::runtime_error("Failed to create VkDescriptorPool");
+    }
+}
+
+auto vk::Device::createSampler() -> void
+{
+    auto const samplerCreateInfo{ VkSamplerCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV= VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    }};
+
+    if (vkCreateSampler(m.device, &samplerCreateInfo, nullptr, &m.sampler))
+    {
+        throw std::runtime_error("Failed to create VkSampler");
     }
 }

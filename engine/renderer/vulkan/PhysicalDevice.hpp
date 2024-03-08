@@ -21,10 +21,13 @@ namespace vk
     public:
         inline operator VkPhysicalDevice() const noexcept
         {
-            return m_physicalDevice;
+            return m.physicalDevice;
         }
 
     private:
-        VkPhysicalDevice m_physicalDevice;
+        struct M
+        {
+            VkPhysicalDevice physicalDevice;
+        } m;
     };
 }

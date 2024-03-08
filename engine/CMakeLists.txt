@@ -6,9 +6,10 @@ set(ENGINE_SOURCES
 "renderer/vulkan/CommandBuffer.cpp"
 "renderer/vulkan/Pipeline.cpp"
 "renderer/vulkan/Image.cpp"
+"renderer/vulkan/Buffer.cpp"
 "renderer/Renderer.cpp"
 "renderer/Window.cpp"
-#"renderer/ImguiRenderer.cpp"
+"renderer/ImguiRenderer.cpp"
 #"renderer/Font.cpp"
 #"scene/MeshLoader.cpp"
 )

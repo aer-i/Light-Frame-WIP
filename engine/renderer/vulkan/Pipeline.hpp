@@ -17,6 +17,7 @@ namespace vk
 {
     class Device;
     class Buffer;
+    class Image;
 
     class Pipeline
     {
@@ -81,27 +82,39 @@ namespace vk
         auto operator=(Pipeline&& other) -> Pipeline&;
 
     public:
+        auto writeImage(Image& image, u32 element, DescriptorType type) -> void;
+
+    public:
         inline operator VkPipeline() const noexcept
         {
-            return m_pipeline;
+            return m.pipeline;
         }
 
         inline operator VkPipelineLayout() const noexcept
         {
-            return m_layout;
+            return m.layout;
+        }
+
+        inline operator VkDescriptorSet() const noexcept
+        {
+            return m.set;
         }
 
         inline auto getBindPoint() const noexcept
         {
-            return m_point;
+            return m.point;
         }
 
     private:
-        Device*               m_device;
-        VkPipelineLayout      m_layout;
-        VkPipeline            m_pipeline;
-        VkDescriptorSetLayout m_setLayout;
-        VkDescriptorSet       m_set;
-        BindPoint             m_point;
+        struct M
+        {
+            Device*               device;
+            VkPipelineLayout      layout;
+            VkPipeline            pipeline;
+            VkDescriptorSetLayout setLayout;
+            VkDescriptorSet       set;
+            BindPoint             point;
+            u32                   imagesBinding;
+        } m;
     };
 }

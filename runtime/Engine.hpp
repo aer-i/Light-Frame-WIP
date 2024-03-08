@@ -15,6 +15,9 @@ public:
     auto execute() -> void;
 
 private:
-    Window   m_window;
-    Renderer m_renderer;
+    struct M
+    {
+        Window   window;
+        Renderer renderer;
+    } m;
 };

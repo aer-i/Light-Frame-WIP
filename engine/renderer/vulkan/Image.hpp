@@ -27,7 +27,7 @@ namespace vk
         auto operator=(Image&& other) -> Image&;
 
     public:
-        auto loadFromFile(std::string_view path) -> void;
+        auto loadFromFile(Device* pDevice, std::string_view path) -> void;
         auto allocate(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage, Format format) -> void;
         auto write(void const* data, size_t dataSize) -> void;
         auto subwrite(void const* data, size_t dataSize, glm::ivec2 offset, glm::uvec2 size) -> void;
@@ -39,53 +39,56 @@ namespace vk
     public:
         inline operator VkImage() const noexcept
         {
-            return m_image;
+            return m.image;
         }
 
         inline operator VkImageView() const noexcept
         {
-            return m_imageView;
+            return m.imageView;
         }
 
         inline auto getSize() const noexcept -> glm::uvec2
         {
-            return m_size;
+            return m.size;
         }
 
         inline auto getWidth() const noexcept -> u32
         {
-            return m_size.x;
+            return m.size.x;
         }
 
         inline auto getHeight() const noexcept -> u32
         {
-            return m_size.y;
+            return m.size.y;
         }
 
         inline auto getLayout() const noexcept -> ImageLayout
         {
-            return m_layout;
+            return m.layout;
         }
 
         inline auto getAspect() const noexcept -> AspectFlags
         {
-            return m_aspect;
+            return m.aspect;
         }
 
         inline auto setLayout(ImageLayout layout) noexcept -> void
         {
-            m_layout = layout;
+            m.layout = layout;
         }
 
     private:
-        Device*         m_device;
-        VkImage         m_image;
-        VkImageView     m_imageView;
-        VmaAllocation   m_allocation;
-        ImageUsageFlags m_usage;
-        ImageLayout     m_layout;
-        AspectFlags     m_aspect;
-        Format          m_format;
-        glm::uvec2      m_size;
+        struct M
+        {
+            Device*         device;
+            VkImage         image;
+            VkImageView     imageView;
+            VmaAllocation   allocation;
+            ImageUsageFlags usage;
+            ImageLayout     layout;
+            AspectFlags     aspect;
+            Format          format;
+            glm::uvec2      size;
+        } m;
     };
 }

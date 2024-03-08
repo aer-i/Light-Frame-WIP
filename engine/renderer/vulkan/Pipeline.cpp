@@ -12,36 +12,28 @@
 static auto readFile(std::string_view filepath) -> std::vector<char>;
 
 vk::Pipeline::Pipeline()
-    : m_device{ nullptr }
-    , m_layout{ nullptr }
-    , m_pipeline{ nullptr }
-    , m_setLayout{ nullptr }
-    , m_set{ nullptr }
+    : m{}
 {}
 
 vk::Pipeline::Pipeline(Device& device, Config const& config)
-    : m_device{ &device }
-    , m_layout{ nullptr }
-    , m_pipeline{ nullptr }
-    , m_setLayout{ nullptr }
-    , m_set{ nullptr }
-    , m_point{ config.point }
+    : m{
+        .device = &device,
+        .point = config.point
+    }
 {
     if (!config.descriptors.empty())
     {
-        auto bindings{ std::vector<VkDescriptorSetLayoutBinding>{config.descriptors.size()} };
-        auto bindingFlags{ std::vector<VkDescriptorBindingFlags>{config.descriptors.size()} };
-        auto writes{ std::vector<VkWriteDescriptorSet>{config.descriptors.size()} };
+        auto bindings{ std::vector<VkDescriptorSetLayoutBinding>(config.descriptors.size()) };
+        auto bindingFlags{ std::vector<VkDescriptorBindingFlags>(config.descriptors.size()) };
+        auto writes{ std::vector<VkWriteDescriptorSet>{} }; writes.reserve(config.descriptors.size());
         auto bufferInfos{ std::deque<VkDescriptorBufferInfo>{} };
-
-        writes.reserve(config.descriptors.size());
 
         for (auto i{ config.descriptors.size() }; i--; )
         {
             auto const& descriptor{ config.descriptors[i] };
 
             bindings[i] = VkDescriptorSetLayoutBinding{
-                .binding = 0,
+                .binding = descriptor.binding,
                 .descriptorType = static_cast<VkDescriptorType>(descriptor.type),
                 .descriptorCount = descriptor.pBuffer ? 1u : 1024u,
                 .stageFlags = descriptor.stage
@@ -50,15 +42,76 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             bindingFlags[i] = descriptor.pBuffer ? 0u : VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
         }
 
-        // TODO
+        auto const setLayoutBindingFlags{ VkDescriptorSetLayoutBindingFlagsCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            .bindingCount = static_cast<u32>(bindingFlags.size()),
+            .pBindingFlags = bindingFlags.data()
+        }};
+
+        auto const descriptorSetLayoutCreateInfo{ VkDescriptorSetLayoutCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = &setLayoutBindingFlags,
+            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+            .bindingCount = static_cast<u32>(bindings.size()),
+            .pBindings = bindings.data()
+        }};
+
+        if (vkCreateDescriptorSetLayout(*m.device, &descriptorSetLayoutCreateInfo, nullptr, &m.setLayout))
+        {
+            throw std::runtime_error("Failed to create VkDescriptorSetLayout");
+        }
+
+        auto const descriptorSetAllocateInfo{ VkDescriptorSetAllocateInfo{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = *m.device,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &m.setLayout
+        }};
+
+        if (vkAllocateDescriptorSets(*m.device, &descriptorSetAllocateInfo, &m.set))
+        {
+            throw std::runtime_error("Failed to allocate VkDescriptorSet");
+        }
+
+        for (auto i{ u32{} }; i < config.descriptors.size(); ++i)
+        {
+            auto const& descriptor{ config.descriptors[i] };
+
+            if (!descriptor.pBuffer)
+            {
+                m.imagesBinding = descriptor.binding;
+                continue;
+            }
+
+            bufferInfos.emplace_back(VkDescriptorBufferInfo{
+                .buffer = *descriptor.pBuffer,
+                .offset = descriptor.offset,
+                .range = descriptor.size ? descriptor.size : ~0ull
+            });
+
+            writes.emplace_back(VkWriteDescriptorSet{
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = m.set,
+                .dstBinding = descriptor.binding,
+                .descriptorCount = 1,
+                .descriptorType = static_cast<VkDescriptorType>(descriptor.type),
+                .pBufferInfo = &bufferInfos.back()
+            });
+        }
+
+        if (!writes.empty())
+        {
+            vkUpdateDescriptorSets(*m.device, static_cast<u32>(writes.size()), writes.data(), 0, nullptr);
+        }
     }
     {
         auto const layoutCreateInfo { VkPipelineLayoutCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO
-            // TODO
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .setLayoutCount = m.set ? 1u : 0u,
+            .pSetLayouts = m.set ? &m.setLayout : nullptr
         }};
 
-        if (vkCreatePipelineLayout(*m_device, &layoutCreateInfo, nullptr, &m_layout))
+        if (vkCreatePipelineLayout(*m.device, &layoutCreateInfo, nullptr, &m.layout))
         {
             throw std::runtime_error("Failed to create VkPipelineLayout");
         }
@@ -83,7 +136,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
                 .pCode = reinterpret_cast<u32 const*>(code.data())
             }};
 
-            if (vkCreateShaderModule(*m_device, &moduleCreateInfo, nullptr, &shaderModules[i]))
+            if (vkCreateShaderModule(*m.device, &moduleCreateInfo, nullptr, &shaderModules[i]))
             {
                 throw std::runtime_error("Failed to create VkShaderModule");
             }
@@ -157,7 +210,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO
         }};
 
-        auto const colorFormat{ static_cast<VkFormat>(m_device->getSurfaceFormat()) };
+        auto const colorFormat{ static_cast<VkFormat>(m.device->getSurfaceFormat()) };
 
         auto const renderingCreateInfo{ VkPipelineRenderingCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -180,10 +233,10 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .pDepthStencilState = &depthStencilStateCreateInfo,
             .pColorBlendState = &colorBlendStateCreateInfo,
             .pDynamicState = &dynamicStateCreateInfo,
-            .layout = m_layout
+            .layout = m.layout
         }};
 
-        if (vkCreateGraphicsPipelines(*m_device, nullptr, 1, &pipelineCreateInfo, nullptr, &m_pipeline))
+        if (vkCreateGraphicsPipelines(*m.device, nullptr, 1, &pipelineCreateInfo, nullptr, &m.pipeline))
         {
             throw std::runtime_error("Failed to create VkPipeline");
         }
@@ -192,7 +245,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
         {
             if (shaderModule)
             {
-                vkDestroyShaderModule(*m_device, shaderModule, nullptr);
+                vkDestroyShaderModule(*m.device, shaderModule, nullptr);
             }
         }
     }
@@ -200,58 +253,56 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
 
 vk::Pipeline::~Pipeline()
 {
-    if (m_device)
+    if (m.device)
     {
-        if (m_setLayout)
+        if (m.setLayout)
         {
-            vkDestroyDescriptorSetLayout(*m_device, m_setLayout, nullptr);
-
-            m_setLayout = nullptr;
-            m_set       = nullptr;
+            vkDestroyDescriptorSetLayout(*m.device, m.setLayout, nullptr);
         }
 
-        if (m_pipeline && m_layout)
+        if (m.pipeline && m.layout)
         {
-            vkDestroyPipeline(*m_device, m_pipeline, nullptr);
-            vkDestroyPipelineLayout(*m_device, m_layout, nullptr);
-
-            m_pipeline = nullptr;
-            m_layout   = nullptr;
+            vkDestroyPipeline(*m.device, m.pipeline, nullptr);
+            vkDestroyPipelineLayout(*m.device, m.layout, nullptr);
         }
     }
+
+    m = {};
 }
 
 vk::Pipeline::Pipeline(Pipeline&& other)
-    : m_device{ other.m_device }
-    , m_pipeline{ other.m_pipeline }
-    , m_layout{ other.m_layout}
-    , m_setLayout{ other.m_setLayout }
-    , m_set{ other.m_set }
-    , m_point{ other.m_point }
+    : m{ std::move(other.m) }
 {
-    other.m_device    = nullptr;
-    other.m_layout    = nullptr;
-    other.m_pipeline  = nullptr;
-    other.m_setLayout = nullptr;
-    other.m_set       = nullptr;
+    other.m = {};
 }
 
 auto vk::Pipeline::operator=(Pipeline&& other) -> Pipeline&
 {
-    m_device    = other.m_device;
-    m_pipeline  = other.m_pipeline;
-    m_layout    = other.m_layout;
-    m_setLayout = other.m_setLayout;
-    m_set       = other.m_set;
-    m_point     = other.m_point;
-
-    other.m_device    = nullptr;
-    other.m_layout    = nullptr;
-    other.m_pipeline  = nullptr;
-    other.m_setLayout = nullptr;
-    other.m_set       = nullptr;
+    m = std::move(other.m);
+    other.m = {};
 
     return *this;
+}
+
+auto vk::Pipeline::writeImage(Image& image, u32 element, DescriptorType type) -> void
+{
+    auto const imageInfo{ VkDescriptorImageInfo{
+        .sampler = *m.device,
+        .imageView = image,
+        .imageLayout = static_cast<VkImageLayout>(image.getLayout()),
+    }};
+
+    auto const write{ VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = m.set,
+        .dstBinding = m.imagesBinding,
+        .dstArrayElement = element,
+        .descriptorCount = 1,
+        .descriptorType = static_cast<VkDescriptorType>(type),
+        .pImageInfo = &imageInfo
+    }};
+
+    vkUpdateDescriptorSets(*m.device, 1, &write, 0, nullptr);
 }
 
 static auto readFile(std::string_view filepath) -> std::vector<char>

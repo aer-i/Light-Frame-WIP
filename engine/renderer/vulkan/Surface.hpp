@@ -38,12 +38,15 @@ namespace vk
     public:
         inline operator VkSurfaceKHR() const noexcept
         {
-            return m_surface;
+            return m.surface;
         }
 
     private:
-        Window*      m_window;
-        Instance*    m_instance;
-        VkSurfaceKHR m_surface;
+        struct M
+        {
+            Window*      window;
+            Instance*    instance;
+            VkSurfaceKHR surface;
+        } m;
     };
 }

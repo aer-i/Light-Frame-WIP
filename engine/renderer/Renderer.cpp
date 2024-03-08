@@ -3,15 +3,18 @@
 #include <spdlog/spdlog.h>
 
 Renderer::Renderer(Window& window)
-    : m_window{ window }
-    , m_instance{ true }
-    , m_surface{ m_window, m_instance }
-    , m_physicalDevice{ m_instance }
-    , m_device{ m_instance, m_surface, m_physicalDevice }
+    : m{
+        .window = window,
+        .instance = vk::Instance{ true },
+        .surface = vk::Surface{ window, m.instance },
+        .physicalDevice = vk::PhysicalDevice{ m.instance },
+        .device = vk::Device{ m.instance, m.surface, m.physicalDevice },
+        .imguiRenderer = ImguiRenderer{ window, m.device }
+    }
 {
     spdlog::info("Created renderer");
 
-    m_pipeline = vk::Pipeline{ m_device, vk::Pipeline::Config{
+    m.pipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{
         .point = vk::Pipeline::BindPoint::eGraphics,
         .stages = {
             { .stage = vk::ShaderStage::eVertex,   .path = "shaders/triangle.vert.spv" },
@@ -28,25 +31,35 @@ Renderer::~Renderer()
 
 auto Renderer::renderFrame() -> void
 {
-    m_device.checkSwapchainState(m_window);
-    m_device.acquireImage();
+    m.device.checkSwapchainState(m.window);
+    m.device.acquireImage();
 
-    auto& commands{ m_device.getCommandBuffer() };
+    auto& commands{ m.device.getCommandBuffer() };
 
     commands.begin();
     commands.beginPresent();
 
-    commands.bindPipeline(m_pipeline);
+    commands.bindPipeline(m.pipeline);
     commands.draw(3);
+
+    ImGui::ShowDemoWindow();
+
+    m.imguiRenderer.update();
+    m.imguiRenderer.renderGui(commands);
 
     commands.endPresent();
     commands.end();
 
-    m_device.submitCommands(ArrayProxy<vk::CommandBuffer::Handle>{ commands });
-    m_device.present();
+    m.device.submitCommands(ArrayProxy<vk::CommandBuffer::Handle>{ commands });
+    m.device.present();
+}
+
+auto Renderer::renderGui() -> void
+{
+    
 }
 
 auto Renderer::waitIdle() -> void
 {
-    m_device.waitIdle();
+    m.device.waitIdle();
 }
