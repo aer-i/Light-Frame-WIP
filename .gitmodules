@@ -1,31 +1,31 @@
-[submodule "vendor/volk"]
-	path = vendor/volk
+[submodule "Vendor/volk"]
+	path = Vendor/volk
 	url = https://github.com/zeux/volk.git
-[submodule "vendor/VulkanMemoryAllocator"]
-	path = vendor/VulkanMemoryAllocator
+[submodule "Vendor/VulkanMemoryAllocator"]
+	path = Vendor/VulkanMemoryAllocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "vendor/glm"]
-	path = vendor/glm
+[submodule "Vendor/glm"]
+	path = Vendor/glm
 	url = https://github.com/g-truc/glm.git
-[submodule "vendor/imgui"]
-	path = vendor/imgui
+[submodule "Vendor/imgui"]
+	path = Vendor/imgui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
-[submodule "vendor/SDL"]
-	path = vendor/SDL
+[submodule "Vendor/SDL"]
+	path = Vendor/SDL
 	url = https://github.com/libsdl-org/SDL.git
-[submodule "vendor/stb"]
-	path = vendor/stb
+[submodule "Vendor/stb"]
+	path = Vendor/stb
 	url = https://github.com/nothings/stb.git
-[submodule "vendor/assimp"]
-	path = vendor/assimp
+[submodule "Vendor/assimp"]
+	path = Vendor/assimp
 	url = https://github.com/assimp/assimp.git
-[submodule "vendor/meshoptimizer"]
-	path = vendor/meshoptimizer
+[submodule "Vendor/meshoptimizer"]
+	path = Vendor/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer.git
-[submodule "vendor/freetype"]
-	path = vendor/freetype
+[submodule "Vendor/freetype"]
+	path = Vendor/freetype
 	url = https://gitlab.freedesktop.org/freetype/freetype.git
-[submodule "vendor/spdlog"]
-	path = vendor/spdlog
+[submodule "Vendor/spdlog"]
+	path = Vendor/spdlog
 	url = https://github.com/gabime/spdlog.git

@@ -311,6 +311,8 @@ auto vk::Pipeline::writeImage(Image& image, u32 element, DescriptorType type) ->
     }};
 
     vkUpdateDescriptorSets(*m.device, 1, &write, 0, nullptr);
+
+    image.setLayout(vk::ImageLayout::eUndefined);
 }
 
 static auto readFile(std::string_view filepath) -> std::vector<char>

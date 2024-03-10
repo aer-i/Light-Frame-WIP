@@ -11,39 +11,7 @@ vk::Image::Image()
     : m{}
 {}
 
-vk::Image::~Image()
-{
-    if (m.device)
-    {
-        if (m.imageView)
-        {
-            vkDestroyImageView(*m.device, m.imageView, nullptr);
-        }
-
-        if (m.image && m.allocation)
-        {
-            vmaDestroyImage(*m.device, m.image, m.allocation);
-        }
-    }
-
-    m = {};
-}
-
-vk::Image::Image(Image&& other)
-    : m{ std::move(other.m) }
-{
-    other.m = {};
-}
-
-auto vk::Image::operator=(Image&& other) -> Image&
-{
-    m = std::move(other.m);
-    other.m = {};
-
-    return *this;
-}
-
-auto vk::Image::loadFromFile(Device* pDevice, std::string_view path) -> void
+vk::Image::Image(Device* pDevice, std::string_view path)
 {
     auto w{ i32{} }, h{ i32{} }, c{ i32{} };
     auto const imageBitmap{ stbi_load(path.data(), &w, &h, &c, STBI_rgb_alpha) };
@@ -52,38 +20,24 @@ auto vk::Image::loadFromFile(Device* pDevice, std::string_view path) -> void
     {
         spdlog::error("Failed to load texture: {}", path.data());
         auto whitePixel{ u32{0xffffffff} };
-        this->allocate(pDevice, {1, 1}, ImageUsage::eSampled, Format::eRGBA8_unorm);
+        *this = Image(pDevice, {1, 1}, ImageUsage::eSampled, Format::eRGBA8_unorm);
         this->write(&whitePixel, 4);
         return;
     }
 
-    this->allocate(pDevice, {w, h}, ImageUsage::eSampled, Format::eRGBA8_unorm);
+    *this = Image(pDevice, {w, h}, ImageUsage::eSampled, Format::eRGBA8_unorm);
     this->write(imageBitmap, w * h * STBI_rgb_alpha);
 
     stbi_image_free(imageBitmap);
 }
 
-auto vk::Image::allocate(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage, Format format) -> void
+vk::Image::Image(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage, Format format)
 {
-    auto aspect{ AspectFlags{} };
-
-    switch (usage)
-    {
-    case ImageUsage::eColorAttachment:
-    case ImageUsage::eSampled:
-    case ImageUsage::eStorage:
-        aspect = vk::Aspect::eColor;
-        break;
-    default:
-        aspect = vk::Aspect::eDepth;
-        break;
-    }
-
     m = {
         .device = pDevice,
         .usage  = usage,
         .layout = ImageLayout::eShaderRead,
-        .aspect = aspect,
+        .aspect = vk::Aspect::eColor,
         .format = format,
         .size   = size
     };
@@ -137,6 +91,74 @@ auto vk::Image::allocate(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage
     if (vkCreateImageView(*m.device, &imageViewCreateInfo, nullptr, &m.imageView))
     {
         throw std::runtime_error("Failed to create VkImageView");
+    }
+}
+
+vk::Image::~Image()
+{
+    if (m.device)
+    {
+        if (m.imageView)
+        {
+            vkDestroyImageView(*m.device, m.imageView, nullptr);
+        }
+
+        if (m.image && m.allocation)
+        {
+            vmaDestroyImage(*m.device, m.image, m.allocation);
+        }
+    }
+
+    m = {};
+}
+
+vk::Image::Image(Image&& other)
+    : m{ std::move(other.m) }
+{
+    other.m = {};
+}
+
+auto vk::Image::operator=(Image&& other) -> Image&
+{
+    m = std::move(other.m);
+    other.m = {};
+
+    return *this;
+}
+
+vk::Image::Image(Device* pDevice, VkImage image, Format format, glm::uvec2 size)
+{
+    m = {
+        .device = pDevice,
+        .image  = image,
+        .usage  = ImageUsage::eColorAttachment,
+        .layout = ImageLayout::eUndefined,
+        .aspect = Aspect::eColor,
+        .format = format,
+        .size   = size,
+    };
+
+    auto const imageViewCreateInfo{ VkImageViewCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = m.image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = static_cast<VkFormat>(m.format),
+        .components = {
+            .r = VK_COMPONENT_SWIZZLE_R,
+            .g = VK_COMPONENT_SWIZZLE_G,
+            .b = VK_COMPONENT_SWIZZLE_B,
+            .a = VK_COMPONENT_SWIZZLE_A
+        },
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1
+        }
+    }};
+
+    if (vkCreateImageView(*m.device, &imageViewCreateInfo, nullptr, &m.imageView))
+    {
+        throw std::runtime_error("Failed to create swapchain VkImageView");
     }
 }
 
@@ -224,40 +246,4 @@ auto vk::Image::write(void const* data, size_t dataSize) -> void
 
 auto vk::Image::subwrite(void const *data, size_t dataSize, glm::ivec2 offset, glm::uvec2 size) -> void
 {
-}
-
-auto vk::Image::loadFromSwapchain(Device* pDevice, VkImage image, Format format, glm::uvec2 size) -> void
-{
-    m = {
-        .device = pDevice,
-        .image  = image,
-        .usage  = ImageUsage::eColorAttachment,
-        .layout = ImageLayout::eUndefined,
-        .aspect = Aspect::eColor,
-        .format = format,
-        .size   = size,
-    };
-
-    auto const imageViewCreateInfo{ VkImageViewCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = m.image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = static_cast<VkFormat>(m.format),
-        .components = {
-            .r = VK_COMPONENT_SWIZZLE_R,
-            .g = VK_COMPONENT_SWIZZLE_G,
-            .b = VK_COMPONENT_SWIZZLE_B,
-            .a = VK_COMPONENT_SWIZZLE_A
-        },
-        .subresourceRange = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .levelCount = 1,
-            .layerCount = 1
-        }
-    }};
-
-    if (vkCreateImageView(*m.device, &imageViewCreateInfo, nullptr, &m.imageView))
-    {
-        throw std::runtime_error("Failed to create swapchain VkImageView");
-    }
 }

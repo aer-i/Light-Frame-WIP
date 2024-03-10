@@ -20,6 +20,8 @@ namespace vk
     {
     public:
         Image();
+        Image(Device* pDevice, std::string_view path);
+        Image(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage, Format format);
         ~Image();
         Image(Image const&) = delete;
         Image(Image&& other);
@@ -27,14 +29,12 @@ namespace vk
         auto operator=(Image&& other) -> Image&;
 
     public:
-        auto loadFromFile(Device* pDevice, std::string_view path) -> void;
-        auto allocate(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage, Format format) -> void;
         auto write(void const* data, size_t dataSize) -> void;
         auto subwrite(void const* data, size_t dataSize, glm::ivec2 offset, glm::uvec2 size) -> void;
 
     private:
         friend class Device;
-        auto loadFromSwapchain(Device* pDevice, VkImage image, Format format, glm::uvec2 size) -> void;
+        Image(Device* pDevice, VkImage image, Format format, glm::uvec2 size);
 
     public:
         inline operator VkImage() const noexcept
@@ -70,6 +70,16 @@ namespace vk
         inline auto getAspect() const noexcept -> AspectFlags
         {
             return m.aspect;
+        }
+
+        inline auto getUsage() const noexcept -> ImageUsageFlags
+        {
+            return m.usage;
+        }
+
+        inline auto getFormat() const noexcept -> Format
+        {
+            return m.format;
         }
 
         inline auto setLayout(ImageLayout layout) noexcept -> void

@@ -42,7 +42,7 @@ namespace vk
 
     public:
         auto waitIdle() -> void;
-        auto checkSwapchainState(Window& window) -> void;
+        auto checkSwapchainState(Window& window) -> bool;
         auto acquireImage() -> void;
         auto submitCommands(ArrayProxy<CommandBuffer::Handle> const& commands) -> void;
         auto present() -> void;
@@ -67,6 +67,11 @@ namespace vk
         inline operator VkSampler() const noexcept
         {
             return m.sampler;
+        }
+
+        inline auto getExtent() const noexcept -> glm::uvec2
+        {
+            return m.swapchainExtent;
         }
 
         inline auto getCommandBuffer() noexcept -> CommandBuffer&
@@ -109,6 +114,7 @@ namespace vk
             CommandBuffer    transferCommandBuffer;
             VmaAllocator     allocator;
             Format           surfaceFormat;
+            glm::uvec2       swapchainExtent;
             u32              imageIndex;
             u32              frameIndex;
             u32              imageCount;

@@ -1,6 +1,7 @@
 #pragma once
 #include "Window.hpp"
 #include "Renderer.hpp"
+#include "Editor.hpp"
 
 class Engine
 {
@@ -19,5 +20,6 @@ private:
     {
         Window   window;
         Renderer renderer;
+        Editor   editor;
     } m;
 };

@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(LightFrame)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/vendor)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Engine)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Runtime)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Vendor)
 
 if (MSVC)
     target_compile_definitions(LightFrame PUBLIC _CRT_SECURE_NO_WARNINGS)
@@ -18,7 +18,7 @@ endif()
 
 #copy assets to bin directory
 
-file(COPY assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY Assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 #compile shader to bin directory
 
@@ -37,10 +37,9 @@ if (NOT GLSL_VALIDATOR)
 endif ()
 
 file(GLOB_RECURSE GLSL_SOURCE_FILES
-    "shaders/*.frag"
-    "shaders/*.vert"
-    "shaders/*.comp"
-    "shaders/*.geom"
+    "Data/Shaders/*.frag"
+    "Data/Shaders/*.vert"
+    "Data/Shaders/*.comp"
 )
 
 foreach(GLSL ${GLSL_SOURCE_FILES})

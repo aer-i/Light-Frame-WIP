@@ -96,7 +96,7 @@ auto vk::Device::waitIdle() -> void
     vkDeviceWaitIdle(m.device);
 }
 
-auto vk::Device::checkSwapchainState(Window &window) -> void
+auto vk::Device::checkSwapchainState(Window &window) -> bool
 {
     static auto previousSize{ window.getSize() };
 
@@ -105,7 +105,11 @@ auto vk::Device::checkSwapchainState(Window &window) -> void
         vkDeviceWaitIdle(m.device);
         this->createSwapchain();
         previousSize = window.getSize();
+        
+        return true;
     }
+
+    return false;
 }
 
 auto vk::Device::acquireImage() -> void
@@ -246,6 +250,7 @@ auto vk::Device::createDevice(Instance& instance) -> void
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .pNext = &vulkan11Features,
         .drawIndirectCount = true,
+        .descriptorIndexing = true,
         .shaderSampledImageArrayNonUniformIndexing = true,
         .descriptorBindingPartiallyBound = true,
         .runtimeDescriptorArray = true
@@ -344,6 +349,10 @@ auto vk::Device::createSwapchain() -> void
     auto minImageCount{ m.surface->getClampedImageCount(*m.physicalDevice, 3u) };
     auto presentMode{ PresentMode::eFifo };
 
+    m.swapchainExtent = {
+        extent.width, extent.height
+    };
+
     if (m.surface->presentModeSupport(*m.physicalDevice, PresentMode::eImmediate))
     {
         presentMode = PresentMode::eImmediate;
@@ -393,7 +402,7 @@ auto vk::Device::createSwapchain() -> void
 
     for (auto i{ imageCount }; i--; )
     {
-        m.swapchainImages[i].loadFromSwapchain(this, images[i], m.surfaceFormat, {extent.width, extent.height});
+        m.swapchainImages[i] = Image(this, images[i], m.surfaceFormat, {extent.width, extent.height});
     }
 }
 
