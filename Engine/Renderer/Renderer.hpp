@@ -5,6 +5,7 @@
 #include "Device.hpp"
 #include "Pipeline.hpp"
 #include "Buffer.hpp"
+#include "Thread.hpp"
 #include <imgui.h>
 
 class Window;
@@ -20,7 +21,8 @@ public:
     auto operator=(Renderer&&) -> Renderer& = delete;
 
 public:
-    auto renderFrame()                   -> void;
+    auto beginFrame()                    -> void;
+    auto endFrame()                      -> void;
     auto waitIdle()                      -> void;
     auto resizeViewport(glm::uvec2 size) -> void;
     auto getViewportTexture()            -> u32;
@@ -37,6 +39,7 @@ private:
     struct M
     {
         Window& window;
+        Thread  commandsThread;
 
         vk::Instance       instance;
         vk::Surface        surface;

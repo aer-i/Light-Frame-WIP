@@ -26,41 +26,45 @@ Renderer::~Renderer()
     spdlog::info("Destroyed renderer");
 }
 
-auto Renderer::renderFrame() -> void
+auto Renderer::beginFrame() -> void
 {
-    auto& commands{ m.device.getCommandBuffer() };
-
-    if (m.device.checkSwapchainState(m.window))
-    {
-        
-    }
-
-    m.device.acquireImage();
-
-    commands.begin();
-
-    commands.barrier(m.mainFramebuffer, vk::ImageLayout::eColorAttachment);
-    commands.beginRendering(m.mainFramebuffer);
-
-    commands.bindPipeline(m.mainPipeline);
-    commands.draw(3);
-
-    commands.endRendering();
-    commands.barrier(m.mainFramebuffer, vk::ImageLayout::eShaderRead);
-
-    commands.beginPresent();
-
-    this->renderGui(commands);
-
-    commands.endPresent();
-    commands.end();
-
-    m.device.submitCommands(ArrayProxy<vk::CommandBuffer::Handle>{ commands });
+    m.commandsThread.wait();
+    m.device.submitCommands(ArrayProxy<vk::CommandBuffer::Handle>{ m.device.getCommandBuffer() });
     m.device.present();
+}
+
+auto Renderer::endFrame() -> void
+{
+    m.device.checkSwapchainState(m.window);
+    m.commandsThread.enqueue([&]
+    {
+        m.device.waitForFences();
+        m.device.acquireImage();
+        auto& commands{ m.device.getCommandBuffer() };
+
+        commands.begin();
+
+        commands.barrier(m.mainFramebuffer, vk::ImageLayout::eColorAttachment);
+        commands.beginRendering(m.mainFramebuffer);
+
+        commands.bindPipeline(m.mainPipeline);
+        commands.draw(3);
+
+        commands.endRendering();
+        commands.barrier(m.mainFramebuffer, vk::ImageLayout::eShaderRead);
+
+        commands.beginPresent();
+
+        this->renderGui(commands);
+
+        commands.endPresent();
+        commands.end();
+    });
 }
 
 auto Renderer::waitIdle() -> void
 {
+    m.commandsThread.wait();
     m.device.waitIdle();
 }
 

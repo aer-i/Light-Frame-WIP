@@ -20,8 +20,8 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
     this->createDevice(instance);
     this->createAllocator(instance);
     this->createSwapchain();
-    this->createCommandBuffers();
     this->createSyncObjects();
+    this->createCommandBuffers();
     this->createTransferResources();
     this->createDescriptorPool();
     this->createSampler();
@@ -96,6 +96,14 @@ auto vk::Device::waitIdle() -> void
     vkDeviceWaitIdle(m.device);
 }
 
+auto vk::Device::waitForFences() -> void
+{
+    m.frameIndex = (m.frameIndex + 1) % m.imageCount;
+
+    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
+    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
+}
+
 auto vk::Device::checkSwapchainState(Window &window) -> bool
 {
     static auto previousSize{ window.getSize() };
@@ -114,9 +122,6 @@ auto vk::Device::checkSwapchainState(Window &window) -> bool
 
 auto vk::Device::acquireImage() -> void
 {
-    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
-    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
-
     switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
     {
     case VK_SUCCESS:
@@ -177,8 +182,6 @@ auto vk::Device::present() -> void
         throw std::runtime_error("Failed to present frame");
         break;
     }
-
-    m.frameIndex = (m.frameIndex + 1) % m.imageCount;
 }
 
 auto vk::Device::transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void
@@ -411,9 +414,30 @@ auto vk::Device::createCommandBuffers() -> void
     m.imageCount = static_cast<u32>(m.swapchainImages.size());
     m.commandBuffers = std::vector<CommandBuffer>{ m.swapchainImages.size() };
 
+    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
+    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
+
+    switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
+    {
+    case VK_SUCCESS:
+    case VK_SUBOPTIMAL_KHR:
+        break;
+    case VK_ERROR_OUT_OF_DATE_KHR:
+        vkDeviceWaitIdle(m.device);
+        this->createSwapchain();
+        break;
+    default:
+        throw std::runtime_error("Failed to acquire next swapchain images");
+        break;
+    }
+
     for (auto& commandBuffer : m.commandBuffers)
     {
         commandBuffer.allocate(this);
+        commandBuffer.begin();
+        commandBuffer.beginPresent();
+        commandBuffer.endPresent();
+        commandBuffer.end();
     }
 }
 

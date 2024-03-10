@@ -1,4 +1,5 @@
 #include "Editor.hpp"
+#include <imgui.h>
 
 Editor::Editor(Renderer& renderer)
     : m{
@@ -8,5 +9,6 @@ Editor::Editor(Renderer& renderer)
 
 auto Editor::render() -> void
 {
+    ImGui::ShowMetricsWindow();
     m.viewport.render();
 }
