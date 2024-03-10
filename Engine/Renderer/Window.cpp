@@ -69,6 +69,8 @@ auto Window::update() -> void
             m.available = false;
             break;
         case SDL_EVENT_WINDOW_MINIMIZED:
+            m.size = { 0, 0 };
+            break;
         case SDL_EVENT_WINDOW_RESIZED:
         case SDL_EVENT_WINDOW_RESTORED:
             SDL_GetWindowSize(m.handle, &m.size.x, &m.size.y);
