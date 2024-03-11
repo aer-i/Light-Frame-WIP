@@ -26,22 +26,13 @@ Renderer::~Renderer()
     spdlog::info("Destroyed renderer");
 }
 
-auto Renderer::beginFrame() -> void
-{
-    m.commandsThread.wait();
-    m.device.submitCommands(ArrayProxy<vk::CommandBuffer::Handle>{ m.device.getCommandBuffer() });
-    m.device.present();
-}
-
-auto Renderer::endFrame() -> void
+auto Renderer::renderFrame() -> void
 {
     m.device.checkSwapchainState(m.window);
-    m.commandsThread.enqueue([&]
-    {
-        m.device.waitForFences();
-        m.device.acquireImage();
-        auto& commands{ m.device.getCommandBuffer() };
+    m.device.acquireImage();
 
+    auto& commands{ m.device.getCommandBuffer() };
+    {
         commands.begin();
 
         commands.barrier(m.mainFramebuffer, vk::ImageLayout::eColorAttachment);
@@ -59,12 +50,14 @@ auto Renderer::endFrame() -> void
 
         commands.endPresent();
         commands.end();
-    });
+    }
+
+    m.device.submitCommands();
+    m.device.present();
 }
 
 auto Renderer::waitIdle() -> void
 {
-    m.commandsThread.wait();
     m.device.waitIdle();
 }
 

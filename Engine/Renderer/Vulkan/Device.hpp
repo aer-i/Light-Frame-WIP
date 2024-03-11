@@ -1,7 +1,7 @@
 #pragma once
 #include "Image.hpp"
 #include "CommandBuffer.hpp"
-#include "ArrayProxy.hpp"
+#include <vector>
 #include <functional>
 
 class Window;
@@ -42,10 +42,9 @@ namespace vk
 
     public:
         auto waitIdle() -> void;
-        auto waitForFences() -> void;
         auto checkSwapchainState(Window& window) -> bool;
         auto acquireImage() -> void;
-        auto submitCommands(ArrayProxy<CommandBuffer::Handle> const& commands) -> void;
+        auto submitCommands() -> void;
         auto present() -> void;
         auto transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void;
 

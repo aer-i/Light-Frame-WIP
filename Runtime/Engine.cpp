@@ -11,10 +11,9 @@ auto Engine::execute() -> void
 {
     while (m.window.available())
     {
-        m.renderer.beginFrame();
-        m.editor.render();
         m.window.update();
-        m.renderer.endFrame();
+        m.editor.render();
+        m.renderer.renderFrame();
     }
 
     m.renderer.waitIdle();
