@@ -7,7 +7,6 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 #include <spdlog/spdlog.h>
-#include <vector>
 #include <stdexcept>
 
 vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physicalDevice)
@@ -32,7 +31,11 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
 vk::Device::~Device()
 {
     m.transferCommandBuffer.~CommandBuffer();
-    m.commandBuffers.clear();
+    for (auto& commandBuffer : m.commandBuffers)
+    {
+        commandBuffer.~CommandBuffer();
+    }
+
     m.swapchainImages.clear();
 
     if (m.sampler)
@@ -96,11 +99,16 @@ auto vk::Device::waitIdle() -> void
     vkDeviceWaitIdle(m.device);
 }
 
+auto vk::Device::waitForFences() -> void
+{
+    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
+}
+
 auto vk::Device::checkSwapchainState(Window &window) -> bool
 {
     static auto previousSize{ window.getSize() };
 
-    if (previousSize != window.getSize())
+    if (previousSize != window.getSize()) [[unlikely]]
     {
         while (window.getWidth() < 1 || window.getHeight() < 1)
         {
@@ -124,27 +132,27 @@ auto vk::Device::checkSwapchainState(Window &window) -> bool
 
 auto vk::Device::acquireImage() -> void
 {
-    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
-
     switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
     {
-    case VK_SUCCESS:
-    case VK_SUBOPTIMAL_KHR:
+    [[likely]] case VK_SUCCESS:
+    [[unlikely]] case VK_SUBOPTIMAL_KHR:
         break;
-    case VK_ERROR_OUT_OF_DATE_KHR:
+    [[unlikely]] case VK_ERROR_OUT_OF_DATE_KHR:
         vkDeviceWaitIdle(m.device);
         this->createSwapchain();
         break;
-    default:
+    [[unlikely]] default:
         throw std::runtime_error("Failed to acquire next swapchain images");
         break;
     }
 }
 
-auto vk::Device::submitCommands() -> void
+auto vk::Device::submitAndPresent() -> void
 {
-    auto const waitStage{ VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT} };
     auto const commandBuffer{ VkCommandBuffer{m.commandBuffers[m.frameIndex]} };
+    auto const waitStage{ VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT} };
+       
+    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
 
     auto const submitInfo{ VkSubmitInfo{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -157,15 +165,11 @@ auto vk::Device::submitCommands() -> void
         .pSignalSemaphores = &m.presentSemaphores[m.frameIndex]
     }};
 
-    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
-    if (vkQueueSubmit(m.queue, 1, &submitInfo, m.fences[m.frameIndex]))
+    if (vkQueueSubmit(m.queue, 1, &submitInfo, m.fences[m.frameIndex])) [[unlikely]]
     {
         throw std::runtime_error("Failed to submit command buffers");
     }
-}
 
-auto vk::Device::present() -> void
-{
     auto const presentInfo{ VkPresentInfoKHR{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
@@ -177,19 +181,19 @@ auto vk::Device::present() -> void
 
     switch (vkQueuePresentKHR(m.queue, &presentInfo))
     {
-    case VK_SUCCESS:
+    [[likely]] case VK_SUCCESS:
         break;
-    case VK_SUBOPTIMAL_KHR:
-    case VK_ERROR_OUT_OF_DATE_KHR:
+    [[unlikely]] case VK_SUBOPTIMAL_KHR:
+    [[unlikely]] case VK_ERROR_OUT_OF_DATE_KHR:
         vkDeviceWaitIdle(m.device);
         this->createSwapchain();
         break;
-    default:
+    [[unlikely]] default:
         throw std::runtime_error("Failed to present frame");
         break;
     }
 
-    m.frameIndex = (m.frameIndex + 1) % m.imageCount;
+    m.frameIndex = (m.frameIndex + 1) % m.frameCount<u32>;
 }
 
 auto vk::Device::transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void
@@ -409,7 +413,7 @@ auto vk::Device::createSwapchain() -> void
     auto images{ std::vector<VkImage>{imageCount} };
     vkGetSwapchainImagesKHR(m.device, m.swapchain, &imageCount, images.data());
 
-    m.swapchainImages = std::vector<Image>{ imageCount };
+    m.swapchainImages = std::pmr::vector<Image>{ imageCount, &pmr::g_rsrc };
 
     for (auto i{ imageCount }; i--; )
     {
@@ -419,9 +423,6 @@ auto vk::Device::createSwapchain() -> void
 
 auto vk::Device::createCommandBuffers() -> void
 {
-    m.imageCount = static_cast<u32>(m.swapchainImages.size());
-    m.commandBuffers = std::vector<CommandBuffer>{ m.swapchainImages.size() };
-
     for (auto& commandBuffer : m.commandBuffers)
     {
         commandBuffer.allocate(this);
@@ -430,20 +431,17 @@ auto vk::Device::createCommandBuffers() -> void
 
 auto vk::Device::createSyncObjects() -> void
 {
-    m.presentSemaphores = std::vector<VkSemaphore>{ m.swapchainImages.size() };
-    m.renderSemaphores  = std::vector<VkSemaphore>{ m.swapchainImages.size() };
-    m.fences            = std::vector<VkFence>{ m.swapchainImages.size() };
+    auto const semaphoreCreateInfo{ VkSemaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+    }};
+
+    auto const fenceCreateInfo{ VkFenceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT
+    }};
 
     for (auto i{ m.presentSemaphores.size() }; i--; )
     {
-        auto const semaphoreCreateInfo{ VkSemaphoreCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
-        }};
-
-        auto const fenceCreateInfo{ VkFenceCreateInfo{
-            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .flags = VK_FENCE_CREATE_SIGNALED_BIT
-        }};
 
         if (vkCreateSemaphore(m.device, &semaphoreCreateInfo, nullptr, &m.presentSemaphores[i]) ||
             vkCreateSemaphore(m.device, &semaphoreCreateInfo, nullptr, &m.renderSemaphores[i]))

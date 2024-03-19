@@ -1,4 +1,3 @@
-target_sources(LightFrame PRIVATE
-    EntryPoint.cpp
-    Engine.cpp
-)
+file(GLOB_RECURSE RUNTIME_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+
+target_sources(LightFrame PRIVATE ${RUNTIME_SOURCES})

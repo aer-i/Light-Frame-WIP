@@ -29,6 +29,7 @@ Renderer::~Renderer()
 auto Renderer::renderFrame() -> void
 {
     m.device.checkSwapchainState(m.window);
+    m.device.waitForFences();
     m.device.acquireImage();
 
     auto& commands{ m.device.getCommandBuffer() };
@@ -52,8 +53,7 @@ auto Renderer::renderFrame() -> void
         commands.end();
     }
 
-    m.device.submitCommands();
-    m.device.present();
+    m.device.submitAndPresent();
 }
 
 auto Renderer::waitIdle() -> void
@@ -170,7 +170,7 @@ auto Renderer::renderGui(vk::CommandBuffer& commands) -> void
     auto vertexOffset{ i32{} };
     auto indexOffset{ u32{} };
 
-    if (imDrawData && imDrawData->CmdListsCount)
+    if (imDrawData && imDrawData->CmdListsCount) [[likely]]
     {
         auto const vertexBufferSize{ imDrawData->TotalVtxCount * sizeof(ImDrawVert) };
         auto const indexBufferSize { imDrawData->TotalIdxCount * sizeof(ImDrawIdx)  };

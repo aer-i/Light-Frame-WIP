@@ -9,7 +9,7 @@ add_executable(LightFrame)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Engine)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Runtime)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/Vendor)
+include(${CMAKE_CURRENT_SOURCE_DIR}/vendor.cmake)
 
 if (MSVC)
     target_compile_definitions(LightFrame PUBLIC _CRT_SECURE_NO_WARNINGS)

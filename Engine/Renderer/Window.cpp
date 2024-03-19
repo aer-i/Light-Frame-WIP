@@ -9,27 +9,25 @@ Window::Window()
     : m{
         .size = {1280, 720},
         .pos = {50, 50},
-        .title = "Light Frame",
+        .title = std::pmr::string("Light Frame", &pmr::g_rsrc),
         .available = true
     }
 {
     if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
     {
-        throw std::runtime_error("Failed to init SDL");
+        throw std::runtime_error("Failed to init SDL: " + std::string(SDL_GetError()));
     }
 
     spdlog::info("Initialized SDL content");
 
-    m.handle = SDL_CreateWindow(
+    if (!(m.handle = SDL_CreateWindow(
         m.title.c_str(),
         static_cast<i32>(m.size.x),
         static_cast<i32>(m.size.y),
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
-    );
-
-    if (!m.handle)
+    )))
     {
-        throw std::runtime_error("Failed to create window");
+        throw std::runtime_error("Failed to create window: " + std::string(SDL_GetError()));
     }
     
     SDL_SetWindowPosition(m.handle, m.pos.x, m.pos.y);
@@ -58,28 +56,28 @@ auto Window::update() -> void
 
     while (SDL_PollEvent(&event))
     {
-        if (ImGui::GetCurrentContext())
+        if (ImGui::GetCurrentContext()) [[likely]]
         {
             ImGui_ImplSDL3_ProcessEvent(&event);
         }
 
         switch (event.type)
         {
-        case SDL_EVENT_QUIT:
+        [[unlikely]] case SDL_EVENT_QUIT:
             m.available = false;
             break;
-        case SDL_EVENT_WINDOW_MINIMIZED:
+        [[unlikely]] case SDL_EVENT_WINDOW_MINIMIZED:
             m.size = { 0, 0 };
             break;
         case SDL_EVENT_WINDOW_RESIZED:
         case SDL_EVENT_WINDOW_RESTORED:
             SDL_GetWindowSize(m.handle, &m.size.x, &m.size.y);
             break;
-        case SDL_EVENT_MOUSE_MOTION:
+        [[likely]] case SDL_EVENT_MOUSE_MOTION:
             SDL_GetMouseState(&m.cursorPos.x, &m.cursorPos.y);
             SDL_GetGlobalMouseState(&m.globCursorPos.x, &m.globCursorPos.y);
             break;
-        default:
+        [[likely]] default:
             break;
         }
     }
@@ -122,6 +120,7 @@ auto Window::getKeyDown(i32 key) -> bool
         prevKeyboardState[key] = true;
         return true;
     }
+
     if (!m.keyboardState[key])
     {
         prevKeyboardState[key] = false;
@@ -139,6 +138,7 @@ auto Window::getKeyUp(i32 key) -> bool
         prevKeyboardState[key] = false;
         return true;
     }
+
     if (m.keyboardState[key])
     {
         prevKeyboardState[key] = true;

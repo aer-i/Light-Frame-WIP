@@ -19,6 +19,7 @@ set(ENGINE_DIRS
 "Editor/"
 "Core/"
 "Scene/"
+"./"
 )
 
 target_sources(LightFrame PRIVATE ${ENGINE_SOURCES})

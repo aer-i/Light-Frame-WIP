@@ -1,7 +1,7 @@
 #pragma once
 #include "Image.hpp"
 #include "CommandBuffer.hpp"
-#include <vector>
+#include "BufferResource.hpp"
 #include <functional>
 
 class Window;
@@ -42,10 +42,10 @@ namespace vk
 
     public:
         auto waitIdle() -> void;
+        auto waitForFences() -> void;
         auto checkSwapchainState(Window& window) -> bool;
         auto acquireImage() -> void;
-        auto submitCommands() -> void;
-        auto present() -> void;
+        auto submitAndPresent() -> void;
         auto transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void;
 
     public:
@@ -102,6 +102,9 @@ namespace vk
     private:
         struct M
         {
+            template<typename T = size_t>
+            static constexpr decltype(auto) frameCount = static_cast<T>(3);
+
             Surface*         surface;
             PhysicalDevice*  physicalDevice;
             VkDevice         device;
@@ -117,13 +120,13 @@ namespace vk
             glm::uvec2       swapchainExtent;
             u32              imageIndex;
             u32              frameIndex;
-            u32              imageCount;
 
-            std::vector<VkSemaphore>   presentSemaphores;
-            std::vector<VkSemaphore>   renderSemaphores;
-            std::vector<VkFence>       fences;
-            std::vector<Image>         swapchainImages;
-            std::vector<CommandBuffer> commandBuffers;
+            std::pmr::vector<Image> swapchainImages;
+
+            std::array<VkSemaphore,   frameCount<>> presentSemaphores;
+            std::array<VkSemaphore,   frameCount<>> renderSemaphores;
+            std::array<VkFence,       frameCount<>> fences;
+            std::array<CommandBuffer, frameCount<>> commandBuffers;
         } m;  
     };
 }

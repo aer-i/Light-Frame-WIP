@@ -157,7 +157,7 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
 
     switch (image.getLayout())
     {
-    case ImageLayout::eUndefined:
+    [[unlikely]] case ImageLayout::eUndefined:
         imageBarrier.srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
         imageBarrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
         imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
@@ -177,7 +177,7 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
             imageBarrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
             imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             break;
-        default:
+        [[unlikely]] default:
             break;
         }
         break;
@@ -191,7 +191,7 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
             imageBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
             imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             break;
-        default:
+        [[unlikely]] default:
             break;
         }
         break;
@@ -205,10 +205,10 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
             imageBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
             imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             break;
-        default:
+        [[unlikely]] default:
             break;
         }
-    default:
+    [[unlikely]] default:
         break;
     }
 
