@@ -9,6 +9,7 @@ set(ENGINE_SOURCES
 "Renderer/Vulkan/Buffer.cpp"
 "Renderer/Renderer.cpp"
 "Renderer/Window.cpp"
+"Renderer/Camera.cpp"
 "Editor/Editor.cpp"
 "Editor/Viewport.cpp"
 )

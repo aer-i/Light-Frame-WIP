@@ -149,16 +149,46 @@ auto Window::getKeyUp(i32 key) -> bool
 
 auto Window::getButton(i32 button) -> bool
 {
-    return false;
+    return SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON(button);
 }
 
 auto Window::getButtonDown(i32 button) -> bool
 {
+    bool static prevMouseState[6] = { false };
+    auto mouseState{ SDL_GetMouseState(nullptr, nullptr) };
+    auto pressed{ static_cast<bool>(mouseState & SDL_BUTTON(button)) };
+
+    if (pressed && !prevMouseState[button])
+    {
+        prevMouseState[button] = true;
+        return true;
+    }
+
+    if (!pressed)
+    {
+        prevMouseState[button] = false;
+    }
+
     return false;
 }
 
 auto Window::getButtonUp(i32 button) -> bool
 {
+    bool static prevMouseState[6] = { false };
+    auto mouseState{ SDL_GetMouseState(nullptr, nullptr) };
+    auto pressed{ static_cast<bool>(mouseState & SDL_BUTTON(button)) };
+
+    if (!pressed && prevMouseState[button])
+    {
+        prevMouseState[button] = false;
+        return true;
+    }
+
+    if (pressed)
+    {
+        prevMouseState[button] = true;
+    }
+
     return false;
 }
 

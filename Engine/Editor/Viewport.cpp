@@ -4,10 +4,13 @@
 Viewport::Viewport(Renderer& renderer)
     : m{
         .renderer = renderer,
+        .camera = EditorCamera{ renderer.getWindow() },
         .viewport = renderer.getViewportTexture(),
         .resolutionOption = 2
     }
-{}
+{
+    renderer.setCamera(&m.camera);
+}
 
 auto Viewport::render() -> void
 {
@@ -47,7 +50,10 @@ auto Viewport::render() -> void
             ImGui::EndMenuBar();
         }
 
-        ImGui::Image(&m.viewport, ImGui::GetContentRegionAvail());
+        auto contentRegion{ ImGui::GetContentRegionAvail() };
+        m.camera.update();
+        m.camera.setProjection(70.f, contentRegion.x / contentRegion.y, 0.1f, 1024.0f);
+        ImGui::Image(&m.viewport, contentRegion);
     }
     ImGui::End();
 }

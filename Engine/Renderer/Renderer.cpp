@@ -39,7 +39,10 @@ auto Renderer::renderFrame() -> void
         commands.barrier(m.mainFramebuffer, vk::ImageLayout::eColorAttachment);
         commands.beginRendering(m.mainFramebuffer);
 
+        auto cameraProjView{ m.currentCamera->getProjectionView() };
+
         commands.bindPipeline(m.mainPipeline);
+        commands.pushConstant(&cameraProjView, sizeof cameraProjView);
         commands.draw(3);
 
         commands.endRendering();
@@ -76,9 +79,19 @@ auto Renderer::resizeViewport(glm::uvec2 size) -> void
     m.imguiPipeline.writeImage(m.mainFramebuffer, m.imguiViewportIndex, vk::DescriptorType::eCombinedImageSampler);
 }
 
+auto Renderer::setCamera(Camera* pCamera) -> void
+{
+    m.currentCamera = pCamera;
+}
+
 auto Renderer::getViewportTexture() -> u32
 {
     return m.imguiViewportIndex;
+}
+
+auto Renderer::getWindow() -> Window&
+{
+    return m.window;
 }
 
 auto Renderer::initImgui() -> void

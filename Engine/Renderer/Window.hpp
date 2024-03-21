@@ -154,3 +154,16 @@ namespace key
         eRightGui     = 231
     };
 }
+
+namespace button
+{
+    enum : i32
+    {
+        eNone   = 0,
+        eLeft   = 1,
+        eMiddle = 2,
+        eRight  = 3,
+        eX1     = 4,
+        eX2     = 5
+    };
+}

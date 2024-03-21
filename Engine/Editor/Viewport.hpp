@@ -1,5 +1,6 @@
 #pragma once
 #include "Types.hpp"
+#include "EditorCamera.hpp"
 
 class Renderer;
 
@@ -19,8 +20,9 @@ public:
 private:
     struct M
     {
-        Renderer& renderer;
-        u32       viewport;
-        i32       resolutionOption;
+        Renderer&    renderer;
+        EditorCamera camera;
+        u32          viewport;
+        i32          resolutionOption;
     } m;
 };

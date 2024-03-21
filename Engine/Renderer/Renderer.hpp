@@ -5,6 +5,7 @@
 #include "Device.hpp"
 #include "Pipeline.hpp"
 #include "Buffer.hpp"
+#include "Camera.hpp"
 #include <imgui.h>
 
 class Window;
@@ -23,7 +24,9 @@ public:
     auto renderFrame()                   -> void;
     auto waitIdle()                      -> void;
     auto resizeViewport(glm::uvec2 size) -> void;
+    auto setCamera(Camera* pCamera)      -> void;
     auto getViewportTexture()            -> u32;
+    auto getWindow()                     -> Window&;
 
 private:
     auto initImgui() -> void;
@@ -37,6 +40,7 @@ private:
     struct M
     {
         Window& window;
+        Camera* currentCamera;
 
         vk::Instance       instance;
         vk::Surface        surface;
