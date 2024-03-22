@@ -30,7 +30,7 @@ Editor::Editor(Renderer& renderer)
 	style.IndentSpacing = 21.0f;
 	style.ColumnsMinSpacing = 6.0f;
 	style.ScrollbarSize = 14.0f;
-	style.ScrollbarRounding = 9.0f;
+	style.ScrollbarRounding = 0.0f;
 	style.GrabMinSize = 10.0f;
 	style.GrabRounding = 0.0f;
 	style.TabRounding = 0.0f;

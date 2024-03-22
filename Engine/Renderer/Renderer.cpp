@@ -7,7 +7,7 @@
 Renderer::Renderer(Window& window)
     : m{
         .window = window,
-        .instance = vk::Instance{ true },
+        .instance = vk::Instance{ false },
         .surface = vk::Surface{ window, m.instance },
         .physicalDevice = vk::PhysicalDevice{ m.instance },
         .device = vk::Device{ m.instance, m.surface, m.physicalDevice }

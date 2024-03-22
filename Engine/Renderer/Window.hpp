@@ -19,6 +19,7 @@ public:
 
     auto update()                          -> void;
     auto setTitle(std::string_view title)  -> void;
+    auto setCursorPos(glm::vec2 pos)       -> void;
     auto setRelativeMouseMode(bool enable) -> void;
     auto getRelativeMouseMode()            -> bool;
     auto getKey(i32 key)                   -> bool;

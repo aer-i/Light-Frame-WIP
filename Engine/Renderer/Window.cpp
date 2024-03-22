@@ -96,9 +96,14 @@ auto Window::setTitle(std::string_view title) -> void
     SDL_SetWindowTitle(m.handle, m.title.c_str());
 }
 
+auto Window::setCursorPos(glm::vec2 pos) -> void
+{
+    SDL_WarpMouseInWindow(m.handle, pos.x, pos.y);
+}
+
 auto Window::setRelativeMouseMode(bool enable) -> void
 {
-    SDL_SetRelativeMouseMode(enable);
+    SDL_SetRelativeMouseMode(static_cast<SDL_bool>(enable));
 }
 
 auto Window::getRelativeMouseMode() -> bool

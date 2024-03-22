@@ -34,11 +34,25 @@ public:
 			position += normalize(velocity) * window->getDeltaTime() * speed;
 		}
 
+        if (window->getButtonDown(button::eRight))
+        {
+            mousePos = window->getCursorPos();
+            window->setRelativeMouseMode(true);
+        }
+
 		if (window->getButton(button::eRight))
 		{
+            window->setCursorPos(mousePos);
+
 			yawPitch.x = glm::mod(yawPitch.x - window->getCursorOffsetX() * 0.1f, 360.f);
 			yawPitch.y += window->getCursorOffsetY() * 0.1f;
 		}
+
+        if (window->getButtonUp(button::eRight))
+        {
+            window->setRelativeMouseMode(false);
+            window->setCursorPos(mousePos);
+        }
 
 		if (yawPitch.y >  89.9f) yawPitch.y =  89.9f;
     	if (yawPitch.y < -89.9f) yawPitch.y = -89.9f;
@@ -86,11 +100,12 @@ public:
     	m.view[3][2] =  glm::dot(w, position);
 	}
 
-public:
-	Window*   window	{ (Window*){    } };
-    glm::vec3 position  { glm::vec3{0.0f} };
-    glm::vec3 front  	{ glm::vec3{0.0f} };
-    glm::vec3 right  	{ glm::vec3{0.0f} };
-    glm::vec3 up  	 	{ glm::vec3{0.0f} };
-	glm::vec2 yawPitch	{ glm::vec2{0.0f} };
+private:
+	Window*   window   { nullptr };
+    glm::vec3 position { glm::vec3{0.0f} };
+    glm::vec3 front    { glm::vec3{0.0f} };
+    glm::vec3 right    { glm::vec3{0.0f} };
+    glm::vec3 up  	   { glm::vec3{0.0f} };
+	glm::vec2 yawPitch { glm::vec2{0.0f} };
+    glm::vec2 mousePos { glm::vec2{0.0f} };
 };
