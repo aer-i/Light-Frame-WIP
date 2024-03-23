@@ -96,12 +96,7 @@ auto vk::Device::waitIdle() -> void
     vkDeviceWaitIdle(m.device);
 }
 
-auto vk::Device::waitForFences() -> void
-{
-    vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
-}
-
-auto vk::Device::checkSwapchainState(Window& window) -> bool
+auto vk::Device::checkSwapchainState(Window& window) -> SwapchainResult
 {
     static auto previousSize{ glm::ivec2{} };
 
@@ -113,92 +108,70 @@ auto vk::Device::checkSwapchainState(Window& window) -> bool
 
             if (!window.available())
             {
-                return false;
+                return SwapchainResult::eTerminated;
             }
         }
 
         vkDeviceWaitIdle(m.device);
         this->createSwapchain();
         previousSize = window.getSize();
-        
-        return true;
+
+        return SwapchainResult::eRecreated;
     }
 
-    return false;
-}
-
-static Thread acquireThread;
-
-auto vk::Device::acquireImage() -> void
-{
-    acquireThread.wait();
-
-    switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
-    {
-    [[unlikely]] case VK_SUBOPTIMAL_KHR:
-    [[likely]] case VK_SUCCESS:
-        break;
-    [[unlikely]] case VK_ERROR_OUT_OF_DATE_KHR:
-        vkDeviceWaitIdle(m.device);
-        this->createSwapchain();
-        break;
-    [[unlikely]] default:
-        throw std::runtime_error("Failed to acquire next swapchain images");
-        break;
-    }
+    return SwapchainResult::eSuccess;
 }
 
 auto vk::Device::submitAndPresent() -> void
 {
-    auto const waitStage{ VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT} };
-    auto const commandBuffer{ VkCommandBuffer{m.commandBuffers[m.imageIndex]} };
-    auto const renderSemaphore{ m.renderSemaphores[m.frameIndex] };
-    auto const presentSemaphore{ m.presentSemaphores[m.frameIndex] };
-    auto const fence{ m.fences[m.frameIndex] };
-    auto const swapchain{ m.swapchain };
-    auto const queue{ m.queue };
-    auto const imageIndex{ m.imageIndex };
-       
-    m.frameIndex = (m.frameIndex + 1) % m.commandBuffers.size();
-
-    auto const submitInfo{ VkSubmitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &renderSemaphore,
-        .pWaitDstStageMask = &waitStage,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &presentSemaphore
-    }};
-
-    vkResetFences(m.device, 1, &fence);
-    if (vkQueueSubmit(m.queue, 1, &submitInfo, fence)) [[unlikely]]
     {
-        throw std::runtime_error("Failed to submit command buffers");
-    }
+        switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
+        {
+        [[likely]]   case VK_SUCCESS:
+        [[unlikely]] case VK_SUBOPTIMAL_KHR: break;
+        [[unlikely]] default: throw std::runtime_error("Failed to acquire next swapchain images");
+        }
 
-    acquireThread.enqueue([presentSemaphore, swapchain, queue, imageIndex]
+        vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
+    }
+    {
+        auto const waitStage{ VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT} };
+        auto const commandBuffer{ VkCommandBuffer{m.commandBuffers[m.imageIndex]} };
+        auto const submitInfo{ VkSubmitInfo{
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &m.renderSemaphores[m.frameIndex],
+            .pWaitDstStageMask = &waitStage,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &commandBuffer,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &m.presentSemaphores[m.frameIndex]
+        }};
+
+        vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
+        if (vkQueueSubmit(m.queue, 1, &submitInfo, m.fences[m.frameIndex])) [[unlikely]]
+        {
+            throw std::runtime_error("Failed to submit command buffers");
+        }
+    }
     {
         auto const presentInfo{ VkPresentInfoKHR{
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &presentSemaphore,
+            .pWaitSemaphores = &m.presentSemaphores[m.frameIndex],
             .swapchainCount = 1,
-            .pSwapchains = &swapchain,
-            .pImageIndices = &imageIndex
+            .pSwapchains = &m.swapchain,
+            .pImageIndices = &m.imageIndex
         }};
 
-        switch (vkQueuePresentKHR(queue, &presentInfo))
+        switch (vkQueuePresentKHR(m.queue, &presentInfo))
         {
-        [[likely]] case VK_SUCCESS:
-            break;
-        [[unlikely]] default:
-            throw std::runtime_error("Failed to present frame");
-            break;
+        [[likely]]   case VK_SUCCESS: break;
+        [[unlikely]] default: throw std::runtime_error("Failed to present frame");
         }
 
-    });
+        m.frameIndex = (m.frameIndex + 1) % m.commandBuffers.size();
+    }
 }
 
 auto vk::Device::transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void

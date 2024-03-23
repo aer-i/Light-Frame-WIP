@@ -2,7 +2,6 @@
 #include "Image.hpp"
 #include "CommandBuffer.hpp"
 #include "BufferResource.hpp"
-#include "Thread.hpp"
 #include <functional>
 
 class Window;
@@ -34,6 +33,14 @@ namespace vk
     class Device
     {
     public:
+        enum class SwapchainResult
+        {
+            eSuccess    = 0,
+            eRecreated  = 1,
+            eTerminated = 2
+        };
+
+    public:
         Device(Instance& instance, Surface& surface, PhysicalDevice& physicalDevice);
         ~Device();
         Device(Device&& other);
@@ -43,9 +50,7 @@ namespace vk
 
     public:
         auto waitIdle() -> void;
-        auto waitForFences() -> void;
-        auto checkSwapchainState(Window& window) -> bool;
-        auto acquireImage() -> void;
+        auto checkSwapchainState(Window& window) -> SwapchainResult;
         auto submitAndPresent() -> void;
         auto transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void;
 

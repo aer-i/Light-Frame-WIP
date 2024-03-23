@@ -30,25 +30,26 @@ namespace lf
 
             static_cast<T*>(this)->registerScripts();
 
-            float fps;
-            float sec;
+            auto time{ f32{} };
+            auto fps{ u32{} };
 
             while (m.window.available()) [[likely]]
             {
-                if (sec <= 1) {
-                    sec += m.window.getDeltaTime();
-                    fps++;
+                if (time <= 1)
+                {
+                    time += m.window.getDeltaTime();
+                    ++fps;
                 }
                 else 
                 {
                     m.window.setTitle(std::to_string(fps));
-                    sec = 0;
+                    time = 0;
                     fps = 0;
                 }
 
-                m.window.update();
                 m.editor.render();
                 m.renderer.renderFrame();
+                m.window.update();
             }
 
             m.renderer.waitIdle();

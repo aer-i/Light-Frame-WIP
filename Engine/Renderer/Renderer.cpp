@@ -6,7 +6,7 @@
 Renderer::Renderer(Window& window)
     : m{
         .window = window,
-        .instance = vk::Instance{ false },
+        .instance = vk::Instance{ true },
         .surface = vk::Surface{ window, m.instance },
         .physicalDevice = vk::PhysicalDevice{ m.instance },
         .device = vk::Device{ m.instance, m.surface, m.physicalDevice }
@@ -27,15 +27,20 @@ Renderer::~Renderer()
 
 auto Renderer::renderFrame() -> void
 {
-    if (m.device.checkSwapchainState(m.window)) [[unlikely]]
+    switch (m.device.checkSwapchainState(m.window))
     {
+    [[likely]]   case vk::Device::SwapchainResult::eSuccess:
+        m.device.submitAndPresent();
+        break;
+    [[unlikely]] case vk::Device::SwapchainResult::eRecreated:
         m.device.waitIdle();
         this->recordCommands();
+        m.device.submitAndPresent();
+        break;
+    [[unlikely]] case vk::Device::SwapchainResult::eTerminated:
+        m.device.waitIdle();
+        return;
     }
-
-    m.device.waitForFences();
-    m.device.acquireImage();
-    m.device.submitAndPresent();
 }
 
 auto Renderer::waitIdle() -> void
