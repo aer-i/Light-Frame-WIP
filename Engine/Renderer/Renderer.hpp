@@ -6,7 +6,6 @@
 #include "Pipeline.hpp"
 #include "Buffer.hpp"
 #include "Camera.hpp"
-#include <imgui.h>
 
 class Window;
 
@@ -23,18 +22,13 @@ public:
 public:
     auto renderFrame()                   -> void;
     auto waitIdle()                      -> void;
-    auto resizeViewport(glm::uvec2 size) -> void;
     auto setCamera(Camera* pCamera)      -> void;
-    auto getViewportTexture()            -> u32;
     auto getWindow()                     -> Window&;
 
 private:
-    auto initImgui() -> void;
-    auto terminateImgui() -> void;
+    auto recordCommands()    -> void;
     auto allocateResources() -> void;
-    auto createPipelines() -> void;
-    auto renderGui(vk::CommandBuffer& commands) -> void;
-    auto addImageToImgui(vk::Image& image) -> u32;
+    auto createPipelines()   -> void;
 
 private:
     struct M
@@ -49,12 +43,5 @@ private:
 
         vk::Pipeline mainPipeline;
         vk::Image    mainFramebuffer;
-
-        vk::Pipeline imguiPipeline;
-        vk::Buffer   imguiVertexBuffer;
-        vk::Buffer   imguiIndexBuffer;
-        vk::Image    imguiFontTexture;
-        u32          imguiFontTextureIndex;
-        u32          imguiViewportIndex;
     } m;
 };

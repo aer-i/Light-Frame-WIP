@@ -105,18 +105,10 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
         }
     }
     {
-        auto const pushConstantRange{ VkPushConstantRange{
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = 128
-        }};
-
         auto const layoutCreateInfo { VkPipelineLayoutCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .setLayoutCount = m.set ? 1u : 0u,
-            .pSetLayouts = m.set ? &m.setLayout : nullptr,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &pushConstantRange
+            .pSetLayouts = m.set ? &m.setLayout : nullptr
         }};
 
         if (vkCreatePipelineLayout(*m.device, &layoutCreateInfo, nullptr, &m.layout))

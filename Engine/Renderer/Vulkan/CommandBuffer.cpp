@@ -43,7 +43,7 @@ auto vk::CommandBuffer::begin() -> void
 
     auto const beginInfo{ VkCommandBufferBeginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
     }};
 
     if (vkBeginCommandBuffer(m.buffer, &beginInfo))
@@ -60,16 +60,16 @@ auto vk::CommandBuffer::end() -> void
     }
 }
 
-auto vk::CommandBuffer::beginPresent() -> void
+auto vk::CommandBuffer::beginPresent(u32 imageIndex) -> void
 {
-    barrier(m.device->getSwapchainImage(), ImageLayout::eColorAttachment);
-    beginRendering(m.device->getSwapchainImage());
+    barrier(m.device->getSwapchainImage(imageIndex), ImageLayout::eColorAttachment);
+    beginRendering(m.device->getSwapchainImage(imageIndex));
 }
 
-auto vk::CommandBuffer::endPresent() -> void
+auto vk::CommandBuffer::endPresent(u32 imageIndex) -> void
 {
     endRendering();
-    barrier(m.device->getSwapchainImage(), ImageLayout::ePresent);
+    barrier(m.device->getSwapchainImage(imageIndex), ImageLayout::ePresent);
 }
 
 auto vk::CommandBuffer::beginRendering(Image const& image) -> void
@@ -123,11 +123,6 @@ auto vk::CommandBuffer::beginRendering(Image const& image) -> void
 auto vk::CommandBuffer::endRendering() -> void
 {
     vkCmdEndRendering(m.buffer);
-}
-
-auto vk::CommandBuffer::pushConstant(const void* data, size_t size) -> void
-{
-    vkCmdPushConstants(m.buffer, *m.currentPipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, size, data);
 }
 
 auto vk::CommandBuffer::copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void
@@ -282,33 +277,6 @@ auto vk::CommandBuffer::drawIndexed(u32 indexCount, u32 indexOffset, i32 vertexO
 }
 
 auto vk::CommandBuffer::allocate(Device* pDevice) -> void
-{
-    m.device = pDevice;
-
-    auto const commandPoolCreateInfo{ VkCommandPoolCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
-    }};
-
-    if (vkCreateCommandPool(*m.device, &commandPoolCreateInfo, nullptr, &m.pool))
-    {
-        throw std::runtime_error("Failed to create VkCommandPool");
-    }
-
-    auto const commandBufferAllocateInfo{ VkCommandBufferAllocateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = m.pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    }};
-
-    if (vkAllocateCommandBuffers(*m.device, &commandBufferAllocateInfo, &m.buffer))
-    {
-        throw std::runtime_error("Failed to allocate VkCommandBuffer");
-    }
-}
-
-auto vk::CommandBuffer::allocateForTransfers(Device* pDevice) -> void
 {
     m.device = pDevice;
 

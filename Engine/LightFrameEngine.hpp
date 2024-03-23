@@ -30,34 +30,21 @@ namespace lf
 
             static_cast<T*>(this)->registerScripts();
 
+            float fps;
+            float sec;
+
             while (m.window.available()) [[likely]]
             {
-                ImGui::ShowDemoWindow();
-
-                if (ImGui::Begin("Scripts"), ImGuiWindowFlags_Popup)
-                {
-                    static char const* currentItem = nullptr;
-
-                    if (ImGui::BeginCombo("##combo", currentItem))
-                    {
-                        for (auto& script : m.scripts)
-                        {
-                            bool isSelected = currentItem == script.first.c_str();
-                            if (ImGui::Selectable(script.first.c_str(), isSelected))
-                            {
-                                currentItem = script.first.c_str();
-                            }
-
-                            if (isSelected)
-                            {
-                                ImGui::SetItemDefaultFocus();
-                            }
-                        }
-
-                        ImGui::EndCombo();
-                    }
+                if (sec <= 1) {
+                    sec += m.window.getDeltaTime();
+                    fps++;
                 }
-                ImGui::End();
+                else 
+                {
+                    m.window.setTitle(std::to_string(fps));
+                    sec = 0;
+                    fps = 0;
+                }
 
                 m.window.update();
                 m.editor.render();

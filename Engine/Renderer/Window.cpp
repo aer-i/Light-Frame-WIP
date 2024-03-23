@@ -2,7 +2,6 @@
 #include <stdexcept>
 #include <chrono>
 #include <SDL3/SDL.h>
-#include <backends/imgui_impl_sdl3.h>
 #include <spdlog/spdlog.h>
 
 Window::Window()
@@ -56,11 +55,6 @@ auto Window::update() -> void
 
     while (SDL_PollEvent(&event))
     {
-        if (ImGui::GetCurrentContext()) [[likely]]
-        {
-            ImGui_ImplSDL3_ProcessEvent(&event);
-        }
-
         switch (event.type)
         {
         [[unlikely]] case SDL_EVENT_QUIT:

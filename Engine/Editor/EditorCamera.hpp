@@ -34,28 +34,14 @@ public:
 			position += normalize(velocity) * window->getDeltaTime() * speed;
 		}
 
-        if (window->getButtonDown(button::eRight))
-        {
-            mousePos = window->getCursorPos();
-            window->setRelativeMouseMode(true);
-        }
-
 		if (window->getButton(button::eRight))
 		{
-            window->setCursorPos(mousePos);
-
 			yawPitch.x = glm::mod(yawPitch.x - window->getCursorOffsetX() * 0.1f, 360.f);
 			yawPitch.y += window->getCursorOffsetY() * 0.1f;
+
+			if (yawPitch.y >  89.9f) yawPitch.y =  89.9f;
+    		if (yawPitch.y < -89.9f) yawPitch.y = -89.9f;
 		}
-
-        if (window->getButtonUp(button::eRight))
-        {
-            window->setRelativeMouseMode(false);
-            window->setCursorPos(mousePos);
-        }
-
-		if (yawPitch.y >  89.9f) yawPitch.y =  89.9f;
-    	if (yawPitch.y < -89.9f) yawPitch.y = -89.9f;
 
 		front = glm::normalize(glm::vec3{
 				std::cos(glm::radians(yawPitch.x)) * std::cos(glm::radians(yawPitch.y)),

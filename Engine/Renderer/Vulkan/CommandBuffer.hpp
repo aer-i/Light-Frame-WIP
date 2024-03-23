@@ -29,11 +29,10 @@ namespace vk
     public:
         auto begin() -> void;
         auto end() -> void;
-        auto beginPresent() -> void;
-        auto endPresent() -> void;
+        auto beginPresent(u32 imageIndex) -> void;
+        auto endPresent(u32 imageIndex) -> void;
         auto beginRendering(Image const& image) -> void;
         auto endRendering() -> void;
-        auto pushConstant(const void* data, size_t size) -> void;
         auto copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void;
         auto barrier(Image& image, ImageLayout layout) -> void;
         auto setScissor(glm::ivec2 offset, glm::uvec2 size) -> void;
@@ -43,7 +42,6 @@ namespace vk
         auto draw(u32 vertexCount) -> void;
         auto drawIndexed(u32 indexCount, u32 indexOffset = 0, i32 vertexOffset = 0) -> void;
         auto allocate(Device* pDevice) -> void;
-        auto allocateForTransfers(Device* pDevice) -> void;
 
     public:
         using Handle = VkCommandBuffer;

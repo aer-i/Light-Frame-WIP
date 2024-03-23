@@ -2,6 +2,7 @@
 #include "Image.hpp"
 #include "CommandBuffer.hpp"
 #include "BufferResource.hpp"
+#include "Thread.hpp"
 #include <functional>
 
 class Window;
@@ -74,14 +75,14 @@ namespace vk
             return m.swapchainExtent;
         }
 
-        inline auto getCommandBuffer() noexcept -> CommandBuffer&
+        inline auto getCommandBuffers() noexcept -> std::pmr::vector<CommandBuffer>&
         {
-            return m.commandBuffers[m.frameIndex];
+            return m.commandBuffers;
         }
 
-        inline auto getSwapchainImage() noexcept -> Image&
+        inline auto getSwapchainImage(u32 imageIndex) noexcept -> Image&
         {
-            return m.swapchainImages[m.imageIndex];
+            return m.swapchainImages[imageIndex];
         }
 
         inline auto getSurfaceFormat() noexcept -> Format
@@ -102,9 +103,6 @@ namespace vk
     private:
         struct M
         {
-            template<typename T = size_t>
-            static constexpr decltype(auto) frameCount = static_cast<T>(3);
-
             Surface*         surface;
             PhysicalDevice*  physicalDevice;
             VkDevice         device;
@@ -121,12 +119,11 @@ namespace vk
             u32              imageIndex;
             u32              frameIndex;
 
-            std::pmr::vector<Image> swapchainImages;
-
-            std::array<VkSemaphore,   frameCount<>> presentSemaphores;
-            std::array<VkSemaphore,   frameCount<>> renderSemaphores;
-            std::array<VkFence,       frameCount<>> fences;
-            std::array<CommandBuffer, frameCount<>> commandBuffers;
+            std::pmr::vector<Image>         swapchainImages;
+            std::pmr::vector<CommandBuffer> commandBuffers;
+            std::pmr::vector<VkSemaphore>   presentSemaphores;
+            std::pmr::vector<VkSemaphore>   renderSemaphores;
+            std::pmr::vector<VkFence>       fences;
         } m;  
     };
 }

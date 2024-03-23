@@ -22,7 +22,5 @@ private:
     {
         Renderer&    renderer;
         EditorCamera camera;
-        u32          viewport;
-        i32          resolutionOption;
     } m;
 };

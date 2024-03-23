@@ -19,8 +19,8 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
     this->createDevice(instance);
     this->createAllocator(instance);
     this->createSwapchain();
-    this->createSyncObjects();
     this->createCommandBuffers();
+    this->createSyncObjects();
     this->createTransferResources();
     this->createDescriptorPool();
     this->createSampler();
@@ -31,11 +31,8 @@ vk::Device::Device(Instance& instance, Surface& surface, PhysicalDevice& physica
 vk::Device::~Device()
 {
     m.transferCommandBuffer.~CommandBuffer();
-    for (auto& commandBuffer : m.commandBuffers)
-    {
-        commandBuffer.~CommandBuffer();
-    }
 
+    m.commandBuffers.clear();
     m.swapchainImages.clear();
 
     if (m.sampler)
@@ -104,9 +101,9 @@ auto vk::Device::waitForFences() -> void
     vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
 }
 
-auto vk::Device::checkSwapchainState(Window &window) -> bool
+auto vk::Device::checkSwapchainState(Window& window) -> bool
 {
-    static auto previousSize{ window.getSize() };
+    static auto previousSize{ glm::ivec2{} };
 
     if (previousSize != window.getSize()) [[unlikely]]
     {
@@ -130,12 +127,16 @@ auto vk::Device::checkSwapchainState(Window &window) -> bool
     return false;
 }
 
+static Thread acquireThread;
+
 auto vk::Device::acquireImage() -> void
 {
+    acquireThread.wait();
+
     switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
     {
-    [[likely]] case VK_SUCCESS:
     [[unlikely]] case VK_SUBOPTIMAL_KHR:
+    [[likely]] case VK_SUCCESS:
         break;
     [[unlikely]] case VK_ERROR_OUT_OF_DATE_KHR:
         vkDeviceWaitIdle(m.device);
@@ -149,51 +150,55 @@ auto vk::Device::acquireImage() -> void
 
 auto vk::Device::submitAndPresent() -> void
 {
-    auto const commandBuffer{ VkCommandBuffer{m.commandBuffers[m.frameIndex]} };
     auto const waitStage{ VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT} };
+    auto const commandBuffer{ VkCommandBuffer{m.commandBuffers[m.imageIndex]} };
+    auto const renderSemaphore{ m.renderSemaphores[m.frameIndex] };
+    auto const presentSemaphore{ m.presentSemaphores[m.frameIndex] };
+    auto const fence{ m.fences[m.frameIndex] };
+    auto const swapchain{ m.swapchain };
+    auto const queue{ m.queue };
+    auto const imageIndex{ m.imageIndex };
        
-    vkResetFences(m.device, 1, &m.fences[m.frameIndex]);
+    m.frameIndex = (m.frameIndex + 1) % m.commandBuffers.size();
 
     auto const submitInfo{ VkSubmitInfo{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &m.renderSemaphores[m.frameIndex],
+        .pWaitSemaphores = &renderSemaphore,
         .pWaitDstStageMask = &waitStage,
         .commandBufferCount = 1,
         .pCommandBuffers = &commandBuffer,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &m.presentSemaphores[m.frameIndex]
+        .pSignalSemaphores = &presentSemaphore
     }};
 
-    if (vkQueueSubmit(m.queue, 1, &submitInfo, m.fences[m.frameIndex])) [[unlikely]]
+    vkResetFences(m.device, 1, &fence);
+    if (vkQueueSubmit(m.queue, 1, &submitInfo, fence)) [[unlikely]]
     {
         throw std::runtime_error("Failed to submit command buffers");
     }
 
-    auto const presentInfo{ VkPresentInfoKHR{
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &m.presentSemaphores[m.frameIndex],
-        .swapchainCount = 1,
-        .pSwapchains = &m.swapchain,
-        .pImageIndices = &m.imageIndex
-    }};
-
-    switch (vkQueuePresentKHR(m.queue, &presentInfo))
+    acquireThread.enqueue([presentSemaphore, swapchain, queue, imageIndex]
     {
-    [[likely]] case VK_SUCCESS:
-        break;
-    [[unlikely]] case VK_SUBOPTIMAL_KHR:
-    [[unlikely]] case VK_ERROR_OUT_OF_DATE_KHR:
-        vkDeviceWaitIdle(m.device);
-        this->createSwapchain();
-        break;
-    [[unlikely]] default:
-        throw std::runtime_error("Failed to present frame");
-        break;
-    }
+        auto const presentInfo{ VkPresentInfoKHR{
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &presentSemaphore,
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain,
+            .pImageIndices = &imageIndex
+        }};
 
-    m.frameIndex = (m.frameIndex + 1) % m.frameCount<u32>;
+        switch (vkQueuePresentKHR(queue, &presentInfo))
+        {
+        [[likely]] case VK_SUCCESS:
+            break;
+        [[unlikely]] default:
+            throw std::runtime_error("Failed to present frame");
+            break;
+        }
+
+    });
 }
 
 auto vk::Device::transferSubmit(std::function<void(CommandBuffer&)>&& function) -> void
@@ -423,6 +428,9 @@ auto vk::Device::createSwapchain() -> void
 
 auto vk::Device::createCommandBuffers() -> void
 {
+    m.commandBuffers = std::pmr::vector<CommandBuffer>{ m.swapchainImages.size(), &pmr::g_rsrc };
+
+
     for (auto& commandBuffer : m.commandBuffers)
     {
         commandBuffer.allocate(this);
@@ -431,6 +439,10 @@ auto vk::Device::createCommandBuffers() -> void
 
 auto vk::Device::createSyncObjects() -> void
 {
+    m.presentSemaphores = std::pmr::vector<VkSemaphore>{ m.commandBuffers.size(), &pmr::g_rsrc };
+    m.renderSemaphores  = std::pmr::vector<VkSemaphore>{ m.commandBuffers.size(), &pmr::g_rsrc };
+    m.fences = std::pmr::vector<VkFence>{ m.commandBuffers.size(), &pmr::g_rsrc };
+
     auto const semaphoreCreateInfo{ VkSemaphoreCreateInfo{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     }};
@@ -458,7 +470,7 @@ auto vk::Device::createSyncObjects() -> void
 
 auto vk::Device::createTransferResources() -> void
 {
-    m.transferCommandBuffer.allocateForTransfers(this);
+    m.transferCommandBuffer.allocate(this);
 
     auto const fenceCreateInfo{ VkFenceCreateInfo{
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO
