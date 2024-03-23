@@ -125,14 +125,14 @@ auto vk::Device::checkSwapchainState(Window& window) -> SwapchainResult
 auto vk::Device::submitAndPresent() -> void
 {
     {
+        vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
+        
         switch (vkAcquireNextImageKHR(m.device, m.swapchain, ~0ull, m.renderSemaphores[m.frameIndex], nullptr, &m.imageIndex))
         {
         [[likely]]   case VK_SUCCESS:
         [[unlikely]] case VK_SUBOPTIMAL_KHR: break;
         [[unlikely]] default: throw std::runtime_error("Failed to acquire next swapchain images");
         }
-
-        vkWaitForFences(m.device, 1, &m.fences[m.frameIndex], 0u, ~0ull);
     }
     {
         auto const waitStage{ VkPipelineStageFlags{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT} };

@@ -27,6 +27,7 @@ public:
 
 private:
     auto recordCommands()    -> void;
+    auto onResize()          -> void;
     auto allocateResources() -> void;
     auto createPipelines()   -> void;
 
@@ -43,5 +44,7 @@ private:
 
         vk::Pipeline mainPipeline;
         vk::Image    mainFramebuffer;
+
+        vk::Pipeline postProcessingPipeline;
     } m;
 };
