@@ -8,6 +8,8 @@ vec2 vertices[] = vec2[3](
 
 layout(binding = 0) restrict readonly uniform CameraUniformBuffer
 {
+    mat4 projection;
+    mat4 view;
     mat4 projView;
 };
 

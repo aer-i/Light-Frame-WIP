@@ -12,9 +12,11 @@ Renderer::Renderer(Window& window)
         .device = vk::Device{ m.instance, m.surface, m.physicalDevice }
     }
 {
+    this->loadModel("Assets/Models/kitten.obj");
+
     this->allocateResources();
     this->createPipelines();
-    this->recordCommands();
+    this->recordCommandsEmpty();
 
     spdlog::info("Created renderer");
 }
@@ -24,36 +26,34 @@ Renderer::~Renderer()
     spdlog::info("Destroyed renderer");
 }
 
-auto Renderer::renderFrame() -> void
-{
-    this->updateBuffers();
-
-    switch (m.device.checkSwapchainState(m.window))
-    {
-    [[likely]]   case vk::Device::SwapchainResult::eSuccess:
-        m.device.submitAndPresent();
-        break;
-    [[unlikely]] case vk::Device::SwapchainResult::eRecreated:
-        this->onResize();
-        m.device.submitAndPresent();
-        break;
-    [[unlikely]] case vk::Device::SwapchainResult::eTerminated:
-        m.device.waitIdle();
-        return;
-    }
-}
-
-auto Renderer::waitIdle() -> void
-{
-    m.device.waitIdle();
-}
-
 auto Renderer::updateBuffers() -> void
 {
-    auto cameraProjectionView{ m.currentCamera->getProjectionView() };
+    struct
+    {
+        glm::mat4 projection, view, projView;
+    } cameraData{
+        .projection = m.currentCamera->getProjection(),
+        .view = m.currentCamera->getView(),
+        .projView = m.currentCamera->getProjectionView()
+    };
 
-    m.cameraUnfiromBuffer.write(&cameraProjectionView, sizeof(cameraProjectionView));
+    m.cameraUnfiromBuffer.write(&cameraData, sizeof(cameraData));
     m.cameraUnfiromBuffer.flush(m.cameraUnfiromBuffer.getSize());
+}
+
+auto Renderer::recordCommandsEmpty() -> void
+{
+    for (auto i{ u32{} }; auto& commands : m.device.getCommandBuffers())
+    {
+        commands.begin();
+        {
+            commands.beginPresent(i);
+            commands.endPresent(i);
+        }
+        commands.end();
+
+        ++i;
+    }
 }
 
 auto Renderer::recordCommands() -> void
@@ -66,7 +66,7 @@ auto Renderer::recordCommands() -> void
             commands.beginRendering(m.mainFramebuffer);
 
             commands.bindPipeline(m.mainPipeline);
-            commands.draw(3);
+            commands.drawIndirect(m.indirectBuffer, 1);
 
             commands.endRendering();
             commands.barrier(m.mainFramebuffer, vk::ImageLayout::eShaderRead);
@@ -110,12 +110,57 @@ auto Renderer::allocateResources() -> void
         vk::Format::eRGBA8_unorm
     };
 
+    m.indirectBuffer = vk::Buffer{
+        m.device,
+        static_cast<u32>(sizeof(vk::IndirectDrawCommand) * 1024),
+        vk::BufferUsage::eIndirectBuffer,
+        vk::MemoryType::eDevice
+    };
+
+    m.indirectBuffer.write(m.indirectCommands.data(), m.indirectCommands.size() * sizeof(vk::IndirectDrawCommand));
+
     m.cameraUnfiromBuffer = vk::Buffer{
         m.device,
-        sizeof(glm::mat4),
+        sizeof(glm::mat4) * 3,
         vk::BufferUsage::eUniformBuffer,
         vk::MemoryType::eHost
     };
+
+    m.meshIndexBuffer = vk::Buffer{
+        m.device,
+        static_cast<u32>(m.meshLoader.indices.size() * sizeof(u32)),
+        vk::BufferUsage::eStorageBuffer,
+        vk::MemoryType::eDevice
+    };
+
+    m.meshIndexBuffer.write(m.meshLoader.indices.data(), m.meshLoader.indices.size() * sizeof(m.meshLoader.indices[0]));
+
+    m.meshPositionBuffer = vk::Buffer{
+        m.device,
+        static_cast<u32>(m.meshLoader.positions.size() * sizeof(u32)),
+        vk::BufferUsage::eStorageBuffer,
+        vk::MemoryType::eDevice
+    };
+
+    m.meshPositionBuffer.write(m.meshLoader.positions.data(), m.meshLoader.positions.size() * sizeof(m.meshLoader.positions[0]));
+
+    m.meshCoordsBuffer = vk::Buffer{
+        m.device,
+        static_cast<u32>(m.meshLoader.uvs.size() * sizeof(u32)),
+        vk::BufferUsage::eStorageBuffer,
+        vk::MemoryType::eDevice
+    };
+
+    m.meshCoordsBuffer.write(m.meshLoader.uvs.data(), m.meshLoader.uvs.size() * sizeof(m.meshLoader.uvs[0]));
+
+    m.meshNormalBuffer = vk::Buffer{
+        m.device,
+        static_cast<u32>(m.meshLoader.normals.size() * sizeof(u32)),
+        vk::BufferUsage::eStorageBuffer,
+        vk::MemoryType::eDevice
+    };
+
+    m.meshNormalBuffer.write(m.meshLoader.normals.data(), m.meshLoader.normals.size() * sizeof(m.meshLoader.normals[0]));
 }
 
 auto Renderer::createPipelines() -> void
@@ -123,11 +168,15 @@ auto Renderer::createPipelines() -> void
     m.mainPipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{
         .point = vk::Pipeline::BindPoint::eGraphics,
         .stages = {
-            { .stage = vk::ShaderStage::eVertex,   .path = "shaders/triangle.vert.spv" },
-            { .stage = vk::ShaderStage::eFragment, .path = "shaders/triangle.frag.spv" },
+            { .stage = vk::ShaderStage::eVertex,   .path = "shaders/main.vert.spv" },
+            { .stage = vk::ShaderStage::eFragment, .path = "shaders/main.frag.spv" }
         },
         .descriptors = {
-            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUnfiromBuffer }
+            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshIndexBuffer },
+            { 1, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshPositionBuffer },
+            { 2, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshCoordsBuffer },
+            { 3, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshNormalBuffer },
+            { 4, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUnfiromBuffer }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
     }};
@@ -136,7 +185,7 @@ auto Renderer::createPipelines() -> void
         .point = vk::Pipeline::BindPoint::eGraphics,
         .stages = {
             { .stage = vk::ShaderStage::eVertex,   .path = "shaders/finalImage.vert.spv" },
-            { .stage = vk::ShaderStage::eFragment, .path = "shaders/finalImage.frag.spv" },
+            { .stage = vk::ShaderStage::eFragment, .path = "shaders/finalImage.frag.spv" }
         },
         .descriptors = {
             { 0, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
@@ -145,4 +194,45 @@ auto Renderer::createPipelines() -> void
     }};
 
     m.postProcessingPipeline.writeImage(m.mainFramebuffer, 0, vk::DescriptorType::eCombinedImageSampler);
+}
+
+auto Renderer::renderFrame() -> void
+{
+    this->updateBuffers();
+
+    switch (m.device.checkSwapchainState(m.window))
+    {
+    [[likely]]   case vk::Device::SwapchainResult::eSuccess:
+        m.device.submitAndPresent();
+        break;
+    [[unlikely]] case vk::Device::SwapchainResult::eRecreated:
+        this->onResize();
+        m.device.submitAndPresent();
+        break;
+    [[unlikely]] case vk::Device::SwapchainResult::eTerminated:
+        m.device.waitIdle();
+        return;
+    }
+}
+
+auto Renderer::waitIdle() -> void
+{
+    m.device.waitIdle();
+}
+
+auto Renderer::loadModel(std::string_view path) -> void
+{
+    auto meshes{ m.meshLoader.loadMesh(path, false) };
+
+    for (auto const& mesh : meshes)
+    {
+        auto instance{ static_cast<u32>(m.indirectCommands.size()) };
+
+        m.indirectCommands.emplace_back(vk::IndirectDrawCommand{
+            .vertexCount = mesh.indexCount,
+            .instanceCount = 1,
+            .firstVertex = mesh.indexOffset,
+            .firstInstance = instance
+        });
+    }
 }

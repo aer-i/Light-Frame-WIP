@@ -1,23 +1,27 @@
 #pragma once
-#include <vector>
+#include "Mesh.hpp"
 #include <string_view>
 #include <assimp/scene.h>
-#include "MeshComponent.hpp"
-#include "Renderer.hpp"
+#include <vector>
 
 class MeshLoader
 {
 public:
-    auto loadMesh(std::string_view path, bool flipUV) -> std::vector<MeshComponent>;
+    auto loadMesh(std::string_view path, bool flipUV) -> std::vector<Mesh>;
 
 private:
     auto processNode(aiNode* pNode, aiScene const* pScene) -> void;
-    auto processMesh(aiMesh* pMesh, aiScene const* pScene) -> MeshComponent;
+    auto processMesh(aiMesh* pMesh, aiScene const* pScene) -> Mesh;
 
 public:
-    std::vector<u32>           m_indices;
-    std::vector<f32>           m_positions;
-    std::vector<f32>           m_uvs;
-    std::vector<u8>            m_normals;
-    std::vector<MeshComponent> m_result;
+    std::vector<u32> indices;
+    std::vector<f32> positions;
+    std::vector<f32> uvs;
+    std::vector<u8>  normals;
+
+private:
+    struct M
+    {
+        std::vector<Mesh> result;
+    } m;
 };

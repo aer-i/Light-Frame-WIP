@@ -17,6 +17,14 @@ set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
 set(SDL_AUDIO OFF CACHE BOOL "" FORCE)
 set(SDL_VIDEO ON CACHE BOOL "" FORCE)
 
+set(ASSIMP_NO_EXPORT ON CACHE BOOL "")
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "")
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "")
+set(ASSIMP_INSTALL_PDB OFF CACHE BOOL "")
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "")
+set(ASSIMP_BUILD_OBJ_IMPORTER ON CACHE BOOL "")
+set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "")
+
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 
@@ -56,6 +64,13 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
+    assimp
+    GIT_REPOSITORY https://github.com/assimp/assimp.git
+    GIT_TAG master
+    GIT_PROGRESS TRUE
+)
+
+FetchContent_Declare(
     meshoptimizer
     GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
     GIT_TAG master
@@ -75,6 +90,7 @@ FetchContent_MakeAvailable(
     vma
     spd-log
     glm
+    assimp
     meshoptimizer
     stb
 )
@@ -90,5 +106,6 @@ target_link_libraries(LightFrame PRIVATE
     spdlog::spdlog
     meshoptimizer
     glm::glm
+    assimp
     volk
 )

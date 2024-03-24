@@ -6,6 +6,8 @@
 #include "Pipeline.hpp"
 #include "Buffer.hpp"
 #include "Camera.hpp"
+#include "MeshLoader.hpp"
+#include <memory>
 
 class Window;
 
@@ -19,16 +21,18 @@ public:
     auto operator=(Renderer const&) -> Renderer& = delete;
     auto operator=(Renderer&&) -> Renderer& = delete;
 
-public:
-    auto renderFrame()                   -> void;
-    auto waitIdle()                      -> void;
-
 private:
-    auto updateBuffers()     -> void;
-    auto recordCommands()    -> void;
-    auto onResize()          -> void;
-    auto allocateResources() -> void;
-    auto createPipelines()   -> void;
+    auto updateBuffers()       -> void;
+    auto recordCommandsEmpty() -> void;
+    auto recordCommands()      -> void;
+    auto onResize()            -> void;
+    auto allocateResources()   -> void;
+    auto createPipelines()     -> void;
+
+public:
+    auto renderFrame()                    -> void;
+    auto waitIdle()                       -> void;
+    auto loadModel(std::string_view path) -> void;
 
 public:
     inline auto setCamera(Camera* pCamera) -> void
@@ -44,8 +48,9 @@ public:
 private:
     struct M
     {
-        Window& window;
-        Camera* currentCamera;
+        Window&    window;
+        Camera*    currentCamera;
+        MeshLoader meshLoader;
 
         vk::Instance       instance;
         vk::Surface        surface;
@@ -54,9 +59,16 @@ private:
 
         vk::Image mainFramebuffer;
 
+        vk::Buffer indirectBuffer;
+        vk::Buffer meshIndexBuffer;
+        vk::Buffer meshPositionBuffer;
+        vk::Buffer meshNormalBuffer;
+        vk::Buffer meshCoordsBuffer;
         vk::Buffer cameraUnfiromBuffer;
 
         vk::Pipeline mainPipeline;
         vk::Pipeline postProcessingPipeline;
+
+        std::vector<vk::IndirectDrawCommand> indirectCommands;
     } m;
 };

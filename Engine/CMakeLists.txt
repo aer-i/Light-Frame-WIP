@@ -12,6 +12,7 @@ set(ENGINE_SOURCES
 "Renderer/Camera.cpp"
 "Editor/Editor.cpp"
 "Editor/Viewport.cpp"
+"Scene/MeshLoader.cpp"
 )
 
 set(ENGINE_DIRS

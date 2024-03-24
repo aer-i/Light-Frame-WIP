@@ -243,6 +243,7 @@ auto vk::Device::createDevice(Instance& instance) -> void
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .pNext = &vulkan11Features,
         .drawIndirectCount = true,
+        .storageBuffer8BitAccess = true,
         .descriptorIndexing = true,
         .shaderSampledImageArrayNonUniformIndexing = true,
         .descriptorBindingPartiallyBound = true,

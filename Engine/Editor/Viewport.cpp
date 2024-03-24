@@ -12,6 +12,8 @@ Viewport::Viewport(Renderer& renderer)
 
 auto Viewport::render() -> void
 {
+    auto const screenSize{ m.renderer.getWindow().getSize() };
+
+    m.camera.setProjection(70.f, static_cast<f32>(screenSize.x) / static_cast<f32>(screenSize.y), 0.1f, 1024.0f);
     m.camera.update();
-    m.camera.setProjection(70.f, 1920 / 1080, 0.1f, 1024.0f);
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include "Types.hpp"
 
-struct MeshComponent
+struct Mesh
 {
     u32 indexCount;
     u32 vertexCount;

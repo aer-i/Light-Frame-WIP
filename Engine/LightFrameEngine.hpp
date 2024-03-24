@@ -47,9 +47,9 @@ namespace lf
                     fps = 0;
                 }
 
-                m.editor.render();
                 m.renderer.renderFrame();
                 m.window.update();
+                m.editor.render();
             }
 
             m.renderer.waitIdle();
