@@ -37,8 +37,8 @@ auto Renderer::updateBuffers() -> void
         .projView = m.currentCamera->getProjectionView()
     };
 
-    m.cameraUnfiromBuffer.write(&cameraData, sizeof(cameraData));
-    m.cameraUnfiromBuffer.flush(m.cameraUnfiromBuffer.getSize());
+    m.cameraUniformBuffer.write(&cameraData, sizeof(cameraData));
+    m.cameraUniformBuffer.flush(m.cameraUniformBuffer.getSize());
 }
 
 auto Renderer::recordCommandsEmpty() -> void
@@ -65,6 +65,9 @@ auto Renderer::recordCommands() -> void
             commands.barrier(m.colorAttachment, vk::ImageLayout::eColorAttachment);
             commands.barrier(m.depthAttachment, vk::ImageLayout::eDepthAttachment);
             commands.beginRendering(m.colorAttachment, &m.depthAttachment);
+
+            commands.bindPipeline(m.gridPipeline);
+            commands.draw(4);
 
             commands.bindPipeline(m.mainPipeline);
             commands.drawIndirect(m.indirectBuffer, static_cast<u32>(m.indirectCommands.size()));
@@ -135,7 +138,7 @@ auto Renderer::allocateResources() -> void
 
     m.indirectBuffer.write(m.indirectCommands.data(), m.indirectCommands.size() * sizeof(vk::IndirectDrawCommand));
 
-    m.cameraUnfiromBuffer = vk::Buffer{
+    m.cameraUniformBuffer = vk::Buffer{
         m.device,
         sizeof(glm::mat4) * 3,
         vk::BufferUsage::eUniformBuffer,
@@ -192,11 +195,28 @@ auto Renderer::createPipelines() -> void
             { 1, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshPositionBuffer },
             { 2, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshCoordsBuffer },
             { 3, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshNormalBuffer },
-            { 4, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUnfiromBuffer }
+            { 4, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUniformBuffer }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
         .cullMode = vk::Pipeline::CullMode::eBack,
-        .depthWrite = true
+        .depthWrite = true,
+        .depthTest = true,
+    }};
+
+    m.gridPipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{
+        .point = vk::Pipeline::BindPoint::eGraphics,
+        .stages = {
+            { .stage = vk::ShaderStage::eVertex,   .path = "shaders/grid.vert.spv" },
+            { .stage = vk::ShaderStage::eFragment, .path = "shaders/grid.frag.spv" }
+        },
+        .descriptors = {
+            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUniformBuffer }
+        },
+        .topology = vk::Pipeline::Topology::eTriangleFan,
+        .cullMode = vk::Pipeline::CullMode::eNone,
+        .depthWrite = true,
+        .depthTest = true,
+        .colorBlending = true
     }};
 
     m.postProcessingPipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{

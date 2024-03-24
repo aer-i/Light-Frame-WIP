@@ -197,7 +197,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
 
         auto const depthStencilStateCreateInfo{ VkPipelineDepthStencilStateCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-            .depthTestEnable = config.depthWrite,
+            .depthTestEnable = config.depthTest,
             .depthWriteEnable = config.depthWrite,
             .depthCompareOp = VK_COMPARE_OP_LESS,
             .stencilTestEnable = false

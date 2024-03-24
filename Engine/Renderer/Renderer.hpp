@@ -65,9 +65,10 @@ private:
         vk::Buffer meshPositionBuffer;
         vk::Buffer meshNormalBuffer;
         vk::Buffer meshCoordsBuffer;
-        vk::Buffer cameraUnfiromBuffer;
+        vk::Buffer cameraUniformBuffer;
 
         vk::Pipeline mainPipeline;
+        vk::Pipeline gridPipeline;
         vk::Pipeline postProcessingPipeline;
 
         std::vector<vk::IndirectDrawCommand> indirectCommands;

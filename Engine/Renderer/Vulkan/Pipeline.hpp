@@ -69,6 +69,7 @@ namespace vk
             Topology                topology;
             CullMode                cullMode;
             bool                    depthWrite;
+            bool                    depthTest;
             bool                    colorBlending;
         };
 
