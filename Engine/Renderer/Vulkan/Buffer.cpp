@@ -127,7 +127,7 @@ auto vk::Buffer::write(void const* data, size_t size) -> void
     }
 }
 
-auto vk::Buffer::write(void const *data, size_t size, size_t offset) -> void
+auto vk::Buffer::write(void const* data, size_t size, size_t offset) -> void
 {
     if (m.memoryType & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {

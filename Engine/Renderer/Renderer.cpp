@@ -26,6 +26,8 @@ Renderer::~Renderer()
 
 auto Renderer::renderFrame() -> void
 {
+    this->updateBuffers();
+
     switch (m.device.checkSwapchainState(m.window))
     {
     [[likely]]   case vk::Device::SwapchainResult::eSuccess:
@@ -46,14 +48,12 @@ auto Renderer::waitIdle() -> void
     m.device.waitIdle();
 }
 
-auto Renderer::setCamera(Camera* pCamera) -> void
+auto Renderer::updateBuffers() -> void
 {
-    m.currentCamera = pCamera;
-}
+    auto cameraProjectionView{ m.currentCamera->getProjectionView() };
 
-auto Renderer::getWindow() -> Window&
-{
-    return m.window;
+    m.cameraUnfiromBuffer.write(&cameraProjectionView, sizeof(cameraProjectionView));
+    m.cameraUnfiromBuffer.flush(m.cameraUnfiromBuffer.getSize());
 }
 
 auto Renderer::recordCommands() -> void
@@ -109,6 +109,13 @@ auto Renderer::allocateResources() -> void
         vk::ImageUsage::eColorAttachment | vk::ImageUsage::eSampled,
         vk::Format::eRGBA8_unorm
     };
+
+    m.cameraUnfiromBuffer = vk::Buffer{
+        m.device,
+        sizeof(glm::mat4),
+        vk::BufferUsage::eUniformBuffer,
+        vk::MemoryType::eHost
+    };
 }
 
 auto Renderer::createPipelines() -> void
@@ -118,6 +125,9 @@ auto Renderer::createPipelines() -> void
         .stages = {
             { .stage = vk::ShaderStage::eVertex,   .path = "shaders/triangle.vert.spv" },
             { .stage = vk::ShaderStage::eFragment, .path = "shaders/triangle.frag.spv" },
+        },
+        .descriptors = {
+            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUnfiromBuffer }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
     }};

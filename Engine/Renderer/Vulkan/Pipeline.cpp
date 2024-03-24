@@ -107,8 +107,8 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
     {
         auto const layoutCreateInfo { VkPipelineLayoutCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .setLayoutCount = m.set ? 1u : 0u,
-            .pSetLayouts = m.set ? &m.setLayout : nullptr
+            .setLayoutCount = m.setLayout ? 1u : 0u,
+            .pSetLayouts = m.setLayout ? &m.setLayout : nullptr
         }};
 
         if (vkCreatePipelineLayout(*m.device, &layoutCreateInfo, nullptr, &m.layout))

@@ -35,6 +35,12 @@ namespace vk
             return m.buffer;
         }
 
+        template<typename T = size_t>
+        inline auto getSize() -> T
+        {
+            return static_cast<T>(m.size);
+        }
+
     private:
         struct M
         {

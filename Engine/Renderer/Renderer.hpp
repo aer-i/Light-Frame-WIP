@@ -22,14 +22,24 @@ public:
 public:
     auto renderFrame()                   -> void;
     auto waitIdle()                      -> void;
-    auto setCamera(Camera* pCamera)      -> void;
-    auto getWindow()                     -> Window&;
 
 private:
+    auto updateBuffers()     -> void;
     auto recordCommands()    -> void;
     auto onResize()          -> void;
     auto allocateResources() -> void;
     auto createPipelines()   -> void;
+
+public:
+    inline auto setCamera(Camera* pCamera) -> void
+    {
+        m.currentCamera = pCamera;
+    }
+
+    inline auto getWindow() -> Window&
+    {
+        return m.window;
+    }
 
 private:
     struct M
@@ -42,9 +52,11 @@ private:
         vk::PhysicalDevice physicalDevice;
         vk::Device         device;
 
-        vk::Pipeline mainPipeline;
-        vk::Image    mainFramebuffer;
+        vk::Image mainFramebuffer;
 
+        vk::Buffer cameraUnfiromBuffer;
+
+        vk::Pipeline mainPipeline;
         vk::Pipeline postProcessingPipeline;
     } m;
 };
