@@ -1,10 +1,15 @@
 #version 460
 
-layout (location = 0) out vec2 outUV;
+layout (location = 0) out vec2 outUv;
+
+vec2 gridPlane[] = vec2[](
+    vec2(-1, -1),
+    vec2( 3, -1),
+    vec2(-1,  3)
+);
 
 void main() 
 {
-	outUV = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-	gl_Position = vec4(outUV * 2.0f - 1.0f, 0.0f, 1.0f);
-	outUV.y = 1.0 - outUV.y;
+	gl_Position = vec4(gridPlane[gl_VertexIndex], 0, 1);
+	outUv = vec2(0.5, -0.5) * gl_Position.xy + vec2(0.5);
 }

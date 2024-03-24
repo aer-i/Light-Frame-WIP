@@ -39,7 +39,7 @@ namespace vk
         auto end() -> void;
         auto beginPresent(u32 imageIndex) -> void;
         auto endPresent(u32 imageIndex) -> void;
-        auto beginRendering(Image const& image) -> void;
+        auto beginRendering(Image const& image, Image const* pDepthImage = nullptr) -> void;
         auto endRendering() -> void;
         auto copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void;
         auto barrier(Image& image, ImageLayout layout) -> void;

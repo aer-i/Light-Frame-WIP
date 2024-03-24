@@ -72,7 +72,7 @@ auto vk::CommandBuffer::endPresent(u32 imageIndex) -> void
     barrier(m.device->getSwapchainImage(imageIndex), ImageLayout::ePresent);
 }
 
-auto vk::CommandBuffer::beginRendering(Image const& image) -> void
+auto vk::CommandBuffer::beginRendering(Image const& image, Image const* pDepthImage) -> void
 {
     {
         auto const colorAttachment{ VkRenderingAttachmentInfo{
@@ -81,6 +81,19 @@ auto vk::CommandBuffer::beginRendering(Image const& image) -> void
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE
+        }};
+
+        auto const depthAttachment{ VkRenderingAttachmentInfo{
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = (pDepthImage) ? VkImageView{ *pDepthImage } : nullptr,
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = VkClearValue{
+                .depthStencil = VkClearDepthStencilValue{
+                    .depth = 1.f
+                }
+            }
         }};
 
         auto const renderingInfo{ VkRenderingInfo{
@@ -93,7 +106,8 @@ auto vk::CommandBuffer::beginRendering(Image const& image) -> void
             },
             .layerCount = 1,
             .colorAttachmentCount = 1,
-            .pColorAttachments = &colorAttachment
+            .pColorAttachments = &colorAttachment,
+            .pDepthAttachment = (pDepthImage) ? &depthAttachment : nullptr
         }};
 
         vkCmdBeginRendering(m.buffer, &renderingInfo);
@@ -199,6 +213,19 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
         case ImageLayout::eColorAttachment:
             imageBarrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
             imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            break;
+        [[unlikely]] default:
+            break;
+        }
+    case ImageLayout::eDepthAttachment:
+        imageBarrier.srcAccessMask = VK_ACCESS_2_NONE;
+        imageBarrier.srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+
+        switch (layout)
+        {
+        case ImageLayout::eDepthAttachment:
+            imageBarrier.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            imageBarrier.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
             break;
         [[unlikely]] default:
             break;

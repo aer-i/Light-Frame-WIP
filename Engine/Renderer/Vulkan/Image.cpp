@@ -37,10 +37,20 @@ vk::Image::Image(Device* pDevice, glm::uvec2 size, ImageUsageFlags usage, Format
         .device = pDevice,
         .usage  = usage,
         .layout = ImageLayout::eShaderRead,
-        .aspect = vk::Aspect::eColor,
+        .aspect = Aspect::eColor,
         .format = format,
         .size   = size
     };
+
+    switch (usage)
+    {
+    case ImageUsage::eDepthAttachment:
+        m.layout = ImageLayout::eDepthAttachment;
+        m.aspect = Aspect::eDepth;
+        break;
+    default:
+        break;
+    }
 
     auto const imageCreateInfo{ VkImageCreateInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

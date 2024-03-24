@@ -57,7 +57,8 @@ private:
         vk::PhysicalDevice physicalDevice;
         vk::Device         device;
 
-        vk::Image mainFramebuffer;
+        vk::Image colorAttachment;
+        vk::Image depthAttachment;
 
         vk::Buffer indirectBuffer;
         vk::Buffer meshIndexBuffer;

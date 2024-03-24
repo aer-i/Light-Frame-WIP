@@ -185,10 +185,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
             .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
             .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                              VK_COLOR_COMPONENT_G_BIT |
-                              VK_COLOR_COMPONENT_B_BIT |
-                              VK_COLOR_COMPONENT_A_BIT
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
         }};
 
         auto const colorBlendStateCreateInfo{ VkPipelineColorBlendStateCreateInfo{
@@ -200,8 +197,8 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
 
         auto const depthStencilStateCreateInfo{ VkPipelineDepthStencilStateCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-            .depthTestEnable = false,
-            .depthWriteEnable = false,
+            .depthTestEnable = config.depthWrite,
+            .depthWriteEnable = config.depthWrite,
             .depthCompareOp = VK_COMPARE_OP_LESS,
             .stencilTestEnable = false
         }};
@@ -216,7 +213,7 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
             .colorAttachmentCount = 1,
             .pColorAttachmentFormats = &colorFormat,
-            .depthAttachmentFormat = VK_FORMAT_UNDEFINED,
+            .depthAttachmentFormat = VK_FORMAT_D32_SFLOAT,
             .stencilAttachmentFormat = VK_FORMAT_UNDEFINED
         }};
 

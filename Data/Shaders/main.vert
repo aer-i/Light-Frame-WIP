@@ -15,7 +15,6 @@ layout(std430, binding = 3) restrict readonly buffer  NormalBuffer  { uint8_t no
 layout(        binding = 4) restrict readonly uniform UniformBuffer { Camera  camera;      };
 
 layout(location = 0) out vec3 outNormal;
-layout(location = 1) out vec2 outUv;
 
 void main()
 {
@@ -25,12 +24,7 @@ void main()
         int(normals[id * 3    ]),
         int(normals[id * 3 + 1]),
         int(normals[id * 3 + 2])
-    );
-
-    outUv = vec2(
-        uvs[id * 2    ],
-        uvs[id * 2 + 1]
-    );
+    ) / 127.0 - 1.0;
 
     gl_Position = camera.projView * vec4(positions[id * 3], positions[id * 3 + 1], positions[id * 3 + 2], 1.0);
 }

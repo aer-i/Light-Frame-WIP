@@ -62,19 +62,20 @@ auto Renderer::recordCommands() -> void
     {
         commands.begin();
         {
-            commands.barrier(m.mainFramebuffer, vk::ImageLayout::eColorAttachment);
-            commands.beginRendering(m.mainFramebuffer);
+            commands.barrier(m.colorAttachment, vk::ImageLayout::eColorAttachment);
+            commands.barrier(m.depthAttachment, vk::ImageLayout::eDepthAttachment);
+            commands.beginRendering(m.colorAttachment, &m.depthAttachment);
 
             commands.bindPipeline(m.mainPipeline);
-            commands.drawIndirect(m.indirectBuffer, 1);
+            commands.drawIndirect(m.indirectBuffer, static_cast<u32>(m.indirectCommands.size()));
 
             commands.endRendering();
-            commands.barrier(m.mainFramebuffer, vk::ImageLayout::eShaderRead);
+            commands.barrier(m.colorAttachment, vk::ImageLayout::eShaderRead);
 
             commands.beginPresent(i);
 
             commands.bindPipeline(m.postProcessingPipeline);
-            commands.draw(4);
+            commands.draw(3);
 
             commands.endPresent(i);
         }
@@ -88,26 +89,41 @@ auto Renderer::onResize() -> void
 {
     this->waitIdle();
 
-    m.mainFramebuffer.~Image();
-    m.mainFramebuffer = vk::Image{
+    m.colorAttachment.~Image();
+    m.colorAttachment = vk::Image{
         &m.device,
         m.device.getExtent(),
         vk::ImageUsage::eColorAttachment | vk::ImageUsage::eSampled,
         vk::Format::eRGBA8_unorm
     };
 
-    m.postProcessingPipeline.writeImage(m.mainFramebuffer, 0, vk::DescriptorType::eCombinedImageSampler);
+    m.depthAttachment.~Image();
+    m.depthAttachment = vk::Image{
+        &m.device,
+        m.device.getExtent(),
+        vk::ImageUsage::eDepthAttachment,
+        vk::Format::eD32_sfloat
+    };
+
+    m.postProcessingPipeline.writeImage(m.colorAttachment, 0, vk::DescriptorType::eCombinedImageSampler);
 
     this->recordCommands();
 }
 
 auto Renderer::allocateResources() -> void
 {
-    m.mainFramebuffer = vk::Image{ 
+    m.colorAttachment = vk::Image{ 
         &m.device,
         m.device.getExtent(),
         vk::ImageUsage::eColorAttachment | vk::ImageUsage::eSampled,
         vk::Format::eRGBA8_unorm
+    };
+
+    m.depthAttachment = vk::Image{
+        &m.device,
+        m.device.getExtent(),
+        vk::ImageUsage::eDepthAttachment,
+        vk::Format::eD32_sfloat
     };
 
     m.indirectBuffer = vk::Buffer{
@@ -179,6 +195,8 @@ auto Renderer::createPipelines() -> void
             { 4, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUnfiromBuffer }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
+        .cullMode = vk::Pipeline::CullMode::eBack,
+        .depthWrite = true
     }};
 
     m.postProcessingPipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{
@@ -190,10 +208,11 @@ auto Renderer::createPipelines() -> void
         .descriptors = {
             { 0, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
         },
-        .topology = vk::Pipeline::Topology::eTriangleFan
+        .topology = vk::Pipeline::Topology::eTriangleFan,
+        .cullMode = vk::Pipeline::CullMode::eNone
     }};
 
-    m.postProcessingPipeline.writeImage(m.mainFramebuffer, 0, vk::DescriptorType::eCombinedImageSampler);
+    m.postProcessingPipeline.writeImage(m.colorAttachment, 0, vk::DescriptorType::eCombinedImageSampler);
 }
 
 auto Renderer::renderFrame() -> void
