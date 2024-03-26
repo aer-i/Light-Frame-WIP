@@ -22,8 +22,8 @@ void main()
 
     outNormal = vec3(
         int(normals[id * 3    ]),
-        int(normals[id * 3 + 1]),
-        int(normals[id * 3 + 2])
+        int(normals[id * 3 - 1]),
+        int(normals[id * 3 - 2])
     ) / 127.0 - 1.0;
 
     gl_Position = camera.projView * vec4(positions[id * 3], positions[id * 3 + 1], positions[id * 3 + 2], 1.0);

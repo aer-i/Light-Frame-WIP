@@ -308,6 +308,11 @@ auto vk::CommandBuffer::drawIndirect(vk::Buffer& buffer, u32 drawCount) -> void
     vkCmdDrawIndirect(m.buffer, buffer, 0, drawCount, sizeof(VkDrawIndirectCommand));
 }
 
+auto vk::CommandBuffer::drawIndexedIndirectCount(Buffer &buffer, u32 maxDraws) -> void
+{
+    vkCmdDrawIndexedIndirectCount(m.buffer, buffer, sizeof(u32), buffer, 0, maxDraws, sizeof(VkDrawIndexedIndirectCommand));
+}
+
 auto vk::CommandBuffer::allocate(Device* pDevice) -> void
 {
     m.device = pDevice;

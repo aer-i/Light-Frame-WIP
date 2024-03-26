@@ -8,6 +8,7 @@
 #include "Camera.hpp"
 #include "MeshLoader.hpp"
 #include <memory>
+#include <imgui.h>
 
 class Window;
 
@@ -28,6 +29,8 @@ private:
     auto onResize()            -> void;
     auto allocateResources()   -> void;
     auto createPipelines()     -> void;
+    auto initImgui()           -> void;
+    auto terminateImgui()      -> void;
 
 public:
     auto renderFrame()                    -> void;
@@ -59,6 +62,7 @@ private:
 
         vk::Image colorAttachment;
         vk::Image depthAttachment;
+        vk::Image imguiFontTexture;
 
         vk::Buffer indirectBuffer;
         vk::Buffer meshIndexBuffer;
@@ -66,11 +70,15 @@ private:
         vk::Buffer meshNormalBuffer;
         vk::Buffer meshCoordsBuffer;
         vk::Buffer cameraUniformBuffer;
+        vk::Buffer imguiIndexBuffer;
+        vk::Buffer imguiVertexBuffer;
+        vk::Buffer imguiIndirectBuffer;
 
         vk::Pipeline mainPipeline;
         vk::Pipeline gridPipeline;
+        vk::Pipeline imguiPipeline;
         vk::Pipeline postProcessingPipeline;
 
-        std::vector<vk::IndirectDrawCommand> indirectCommands;
+        std::vector<vk::DrawIndirectCommand> indirectCommands;
     } m;
 };

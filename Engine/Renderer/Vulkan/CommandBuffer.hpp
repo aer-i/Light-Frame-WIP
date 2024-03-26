@@ -16,11 +16,20 @@ namespace vk
     class Pipeline;
     class Buffer;
 
-    struct IndirectDrawCommand
+    struct DrawIndirectCommand
     {
         u32 vertexCount;
         u32 instanceCount;
         u32 firstVertex;
+        u32 firstInstance;
+    };
+
+    struct DrawIndexedIndirectCommand
+    {
+        u32 indexCount;
+        u32 instanceCount;
+        u32 firstIndex;
+        i32 vertexOffset;
         u32 firstInstance;
     };
 
@@ -49,7 +58,8 @@ namespace vk
         auto bindPipeline(Pipeline& pipeline) -> void;
         auto draw(u32 vertexCount) -> void;
         auto drawIndexed(u32 indexCount, u32 indexOffset = 0, i32 vertexOffset = 0) -> void;
-        auto drawIndirect(vk::Buffer& buffer, u32 drawCount) -> void;
+        auto drawIndirect(Buffer& buffer, u32 drawCount) -> void;
+        auto drawIndexedIndirectCount(Buffer& buffer, u32 maxDraws) -> void;
         auto allocate(Device* pDevice) -> void;
 
     public:

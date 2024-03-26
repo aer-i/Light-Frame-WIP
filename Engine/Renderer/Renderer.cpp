@@ -2,11 +2,12 @@
 #include "Pipeline.hpp"
 #include "Window.hpp"
 #include <spdlog/spdlog.h>
+#include <backends/imgui_impl_sdl3.h>
 
 Renderer::Renderer(Window& window)
     : m{
         .window = window,
-        .instance = vk::Instance{ true },
+        .instance = vk::Instance{ false },
         .surface = vk::Surface{ window, m.instance },
         .physicalDevice = vk::PhysicalDevice{ m.instance },
         .device = vk::Device{ m.instance, m.surface, m.physicalDevice }
@@ -14,15 +15,21 @@ Renderer::Renderer(Window& window)
 {
     this->loadModel("Assets/Models/kitten.obj");
 
+    this->initImgui();
     this->allocateResources();
     this->createPipelines();
     this->recordCommandsEmpty();
+
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+    ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
     spdlog::info("Created renderer");
 }
 
 Renderer::~Renderer()
 {
+    this->terminateImgui();
     spdlog::info("Destroyed renderer");
 }
 
@@ -39,6 +46,68 @@ auto Renderer::updateBuffers() -> void
 
     m.cameraUniformBuffer.write(&cameraData, sizeof(cameraData));
     m.cameraUniformBuffer.flush(m.cameraUniformBuffer.getSize());
+
+    ImGui::ShowDemoWindow();
+
+    {
+        ImGui::Render();
+        auto imDrawData{ ImGui::GetDrawData() };
+
+        auto const vertexBufferSize{ imDrawData->TotalVtxCount * sizeof(ImDrawVert) };
+        auto const indexBufferSize { imDrawData->TotalIdxCount * sizeof(ImDrawIdx)  };
+
+        if ((vertexBufferSize != 0) && (indexBufferSize != 0))
+        {
+            auto vtxOffset{ u32{} };
+            auto idxOffset{ u32{} };
+
+            for (auto* cmdList : imDrawData->CmdLists)
+            {
+                m.imguiVertexBuffer.write(cmdList->VtxBuffer.Data, cmdList->VtxBuffer.Size * sizeof(ImDrawVert), vtxOffset);
+                m.imguiIndexBuffer.write(cmdList->IdxBuffer.Data, cmdList->IdxBuffer.Size * sizeof(ImDrawIdx), idxOffset);
+
+                vtxOffset += cmdList->VtxBuffer.Size * sizeof(ImDrawVert);
+                idxOffset += cmdList->IdxBuffer.Size * sizeof(ImDrawIdx);
+            }
+
+            m.imguiVertexBuffer.flush(vertexBufferSize);
+            m.imguiIndexBuffer.flush(indexBufferSize);
+        }
+
+        auto vertexOffset{ i32{} };
+        auto indexOffset{ u32{} };
+        auto drawCount{ u32{} };
+
+        if (imDrawData && imDrawData->CmdListsCount > 0)
+        {
+            for (auto* cmdList : imDrawData->CmdLists)
+            {
+                for (auto& cmd : cmdList->CmdBuffer)
+                {
+                    auto const drawCommand{ vk::DrawIndexedIndirectCommand{
+                        .indexCount = cmd.ElemCount,
+                        .instanceCount = 1,
+                        .firstIndex = indexOffset,
+                        .vertexOffset = vertexOffset,
+                        .firstInstance = drawCount
+                    }};
+
+                    m.imguiIndirectBuffer.write(&drawCommand, sizeof(drawCommand), sizeof(u32) + drawCount * sizeof(drawCommand));
+
+                    ++drawCount;
+                    indexOffset += cmd.ElemCount;
+                }
+                vertexOffset += cmdList->VtxBuffer.Size;
+            }
+
+            m.imguiIndirectBuffer.write(&drawCount, sizeof(drawCount));
+            m.imguiIndirectBuffer.flush(sizeof(u32) + drawCount * sizeof(vk::DrawIndexedIndirectCommand));
+        }
+
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+        ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+    }
 }
 
 auto Renderer::recordCommandsEmpty() -> void
@@ -79,6 +148,10 @@ auto Renderer::recordCommands() -> void
 
             commands.bindPipeline(m.postProcessingPipeline);
             commands.draw(3);
+
+            commands.bindPipeline(m.imguiPipeline);
+            commands.bindIndexBuffer16(m.imguiIndexBuffer);
+            commands.drawIndexedIndirectCount(m.imguiIndirectBuffer, 1024);
 
             commands.endPresent(i);
         }
@@ -129,14 +202,31 @@ auto Renderer::allocateResources() -> void
         vk::Format::eD32_sfloat
     };
 
+    {
+        auto fontData{ static_cast<u8*>(nullptr) };
+        auto texWidth{ i32{} }, texHeight{ i32{} };
+
+        ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&fontData, &texWidth, &texHeight);
+        auto const uploadSize{ static_cast<size_t>(texHeight * texWidth * 4) };
+
+        m.imguiFontTexture = vk::Image{
+            &m.device,
+            { texWidth, texHeight },
+            vk::ImageUsage::eSampled,
+            vk::Format::eRGBA8_unorm
+        };
+
+        m.imguiFontTexture.write(fontData, uploadSize);
+    }
+
     m.indirectBuffer = vk::Buffer{
         m.device,
-        static_cast<u32>(sizeof(vk::IndirectDrawCommand) * 1024),
+        static_cast<u32>(sizeof(vk::DrawIndirectCommand) * 1024),
         vk::BufferUsage::eIndirectBuffer,
         vk::MemoryType::eDevice
     };
 
-    m.indirectBuffer.write(m.indirectCommands.data(), m.indirectCommands.size() * sizeof(vk::IndirectDrawCommand));
+    m.indirectBuffer.write(m.indirectCommands.data(), m.indirectCommands.size() * sizeof(vk::DrawIndirectCommand));
 
     m.cameraUniformBuffer = vk::Buffer{
         m.device,
@@ -179,6 +269,21 @@ auto Renderer::allocateResources() -> void
         vk::MemoryType::eDevice
     };
 
+    {
+        constexpr auto vertexBufferSize  { u32{ 512 * 1024 * sizeof(ImDrawVert)}                     };
+        constexpr auto indexBufferSize   { u32{ 512 * 1024 * sizeof(ImDrawIdx)}                      };
+        constexpr auto indirectBufferSize{ u32{ 512 * 1024 * sizeof(vk::DrawIndexedIndirectCommand)} };
+
+        auto const initDrawCount{ u32{} };
+
+        m.imguiVertexBuffer   = vk::Buffer{ m.device, vertexBufferSize,   vk::BufferUsage::eStorageBuffer,  vk::MemoryType::eHost };
+        m.imguiIndexBuffer    = vk::Buffer{ m.device, indexBufferSize,    vk::BufferUsage::eIndexBuffer,    vk::MemoryType::eHost };
+        m.imguiIndirectBuffer = vk::Buffer{ m.device, indirectBufferSize, vk::BufferUsage::eIndirectBuffer, vk::MemoryType::eHost };
+
+        m.imguiIndirectBuffer.write(&initDrawCount, sizeof(initDrawCount));
+        m.imguiIndirectBuffer.flush(m.imguiIndirectBuffer.getSize());
+    }
+
     m.meshNormalBuffer.write(m.meshLoader.normals.data(), m.meshLoader.normals.size() * sizeof(m.meshLoader.normals[0]));
 }
 
@@ -215,9 +320,26 @@ auto Renderer::createPipelines() -> void
         .topology = vk::Pipeline::Topology::eTriangleFan,
         .cullMode = vk::Pipeline::CullMode::eNone,
         .depthWrite = true,
-        .depthTest = true,
+        .depthTest = false,
         .colorBlending = true
     }};
+
+    m.imguiPipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{
+        .point = vk::Pipeline::BindPoint::eGraphics,
+        .stages = {
+            { .stage = vk::ShaderStage::eVertex,   .path = "shaders/imgui.vert.spv" },
+            { .stage = vk::ShaderStage::eFragment, .path = "shaders/imgui.frag.spv" }
+        },
+        .descriptors = {
+            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.imguiVertexBuffer },
+            { 1, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
+        },
+        .topology = vk::Pipeline::Topology::eTriangleList,
+        .cullMode = vk::Pipeline::CullMode::eNone,
+        .colorBlending = true
+    }};
+
+    m.imguiPipeline.writeImage(m.imguiFontTexture, 0, vk::DescriptorType::eCombinedImageSampler);
 
     m.postProcessingPipeline = vk::Pipeline{ m.device, vk::Pipeline::Config{
         .point = vk::Pipeline::BindPoint::eGraphics,
@@ -233,6 +355,22 @@ auto Renderer::createPipelines() -> void
     }};
 
     m.postProcessingPipeline.writeImage(m.colorAttachment, 0, vk::DescriptorType::eCombinedImageSampler);
+}
+
+auto Renderer::initImgui() -> void
+{
+    ImGui::CreateContext();
+
+    auto& io{ ImGui::GetIO() }; (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+    ImGui_ImplSDL3_InitForVulkan(const_cast<SDL_Window*>(m.window.getHandle()));
+}
+
+auto Renderer::terminateImgui() -> void
+{
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
 }
 
 auto Renderer::renderFrame() -> void
@@ -267,7 +405,7 @@ auto Renderer::loadModel(std::string_view path) -> void
     {
         auto instance{ static_cast<u32>(m.indirectCommands.size()) };
 
-        m.indirectCommands.emplace_back(vk::IndirectDrawCommand{
+        m.indirectCommands.emplace_back(vk::DrawIndirectCommand{
             .vertexCount = mesh.indexCount,
             .instanceCount = 1,
             .firstVertex = mesh.indexOffset,
