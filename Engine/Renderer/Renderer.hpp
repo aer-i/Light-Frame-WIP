@@ -72,6 +72,7 @@ private:
         vk::Buffer cameraUniformBuffer;
         vk::Buffer imguiIndexBuffer;
         vk::Buffer imguiVertexBuffer;
+        vk::Buffer imguiDrawBuffer;
         vk::Buffer imguiIndirectBuffer;
 
         vk::Pipeline mainPipeline;

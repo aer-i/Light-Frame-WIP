@@ -52,7 +52,6 @@ namespace vk
         auto endRendering() -> void;
         auto copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void;
         auto barrier(Image& image, ImageLayout layout) -> void;
-        auto setScissor(glm::ivec2 offset, glm::uvec2 size) -> void;
         auto bindIndexBuffer16(Buffer& indexBuffer) -> void;
         auto bindIndexBuffer32(Buffer& indexBuffer) -> void;
         auto bindPipeline(Pipeline& pipeline) -> void;

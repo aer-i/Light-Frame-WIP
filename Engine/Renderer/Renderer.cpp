@@ -7,7 +7,7 @@
 Renderer::Renderer(Window& window)
     : m{
         .window = window,
-        .instance = vk::Instance{ false },
+        .instance = vk::Instance{ true },
         .surface = vk::Surface{ window, m.instance },
         .physicalDevice = vk::PhysicalDevice{ m.instance },
         .device = vk::Device{ m.instance, m.surface, m.physicalDevice }
@@ -92,6 +92,7 @@ auto Renderer::updateBuffers() -> void
                         .firstInstance = drawCount
                     }};
 
+                    m.imguiDrawBuffer.write(&cmd.ClipRect, sizeof(cmd.ClipRect), sizeof(cmd.ClipRect) * drawCount);
                     m.imguiIndirectBuffer.write(&drawCommand, sizeof(drawCommand), sizeof(u32) + drawCount * sizeof(drawCommand));
 
                     ++drawCount;
@@ -278,6 +279,7 @@ auto Renderer::allocateResources() -> void
 
         m.imguiVertexBuffer   = vk::Buffer{ m.device, vertexBufferSize,   vk::BufferUsage::eStorageBuffer,  vk::MemoryType::eHost };
         m.imguiIndexBuffer    = vk::Buffer{ m.device, indexBufferSize,    vk::BufferUsage::eIndexBuffer,    vk::MemoryType::eHost };
+        m.imguiDrawBuffer     = vk::Buffer{ m.device, indexBufferSize,    vk::BufferUsage::eStorageBuffer,    vk::MemoryType::eHost };
         m.imguiIndirectBuffer = vk::Buffer{ m.device, indirectBufferSize, vk::BufferUsage::eIndirectBuffer, vk::MemoryType::eHost };
 
         m.imguiIndirectBuffer.write(&initDrawCount, sizeof(initDrawCount));
@@ -332,7 +334,8 @@ auto Renderer::createPipelines() -> void
         },
         .descriptors = {
             { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.imguiVertexBuffer },
-            { 1, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
+            { 1, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.imguiDrawBuffer },
+            { 2, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
         .cullMode = vk::Pipeline::CullMode::eNone,

@@ -245,22 +245,6 @@ auto vk::CommandBuffer::barrier(Image& image, ImageLayout layout) -> void
     image.setLayout(layout);
 }
 
-auto vk::CommandBuffer::setScissor(glm::ivec2 offset, glm::uvec2 size) -> void
-{
-    auto const scissor{ VkRect2D{
-        .offset = {
-            .x = offset.x,
-            .y = offset.y
-        },
-        .extent = {
-            .width = size.x,
-            .height = size.y
-        }
-    }};
-
-    vkCmdSetScissor(m.buffer, 0, 1, &scissor);
-}
-
 auto vk::CommandBuffer::bindIndexBuffer16(Buffer& indexBuffer) -> void
 {
     vkCmdBindIndexBuffer(m.buffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
