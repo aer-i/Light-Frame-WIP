@@ -75,6 +75,12 @@ namespace vk
             return m.sampler;
         }
 
+        template<typename T = u32>
+        inline auto getFrameIndex() const noexcept -> T
+        {
+            return static_cast<T>(m.frameIndex);
+        }
+
         inline auto getExtent() const noexcept -> glm::uvec2
         {
             return m.swapchainExtent;
@@ -85,7 +91,8 @@ namespace vk
             return m.commandBuffers;
         }
 
-        inline auto getSwapchainImage(u32 imageIndex) noexcept -> Image&
+        template<typename T>
+        inline auto getSwapchainImage(T imageIndex) noexcept -> Image&
         {
             return m.swapchainImages[imageIndex];
         }

@@ -34,8 +34,10 @@ auto vk::CommandBuffer::operator=(CommandBuffer&& other) -> CommandBuffer&
     return *this;
 }
 
-auto vk::CommandBuffer::begin() -> void
+auto vk::CommandBuffer::begin(u32 frameIndex) -> void
 {
+    m.frameIndex = frameIndex;
+
     if (vkResetCommandPool(*m.device, m.pool, 0))
     {
         throw std::runtime_error("Failed to reset VkCommandPool");
@@ -60,16 +62,16 @@ auto vk::CommandBuffer::end() -> void
     }
 }
 
-auto vk::CommandBuffer::beginPresent(u32 imageIndex) -> void
+auto vk::CommandBuffer::beginPresent() -> void
 {
-    barrier(m.device->getSwapchainImage(imageIndex), ImageLayout::eColorAttachment);
-    beginRendering(m.device->getSwapchainImage(imageIndex));
+    barrier(m.device->getSwapchainImage(m.frameIndex), ImageLayout::eColorAttachment);
+    beginRendering(m.device->getSwapchainImage(m.frameIndex));
 }
 
-auto vk::CommandBuffer::endPresent(u32 imageIndex) -> void
+auto vk::CommandBuffer::endPresent() -> void
 {
     endRendering();
-    barrier(m.device->getSwapchainImage(imageIndex), ImageLayout::ePresent);
+    barrier(m.device->getSwapchainImage(m.frameIndex), ImageLayout::ePresent);
 }
 
 auto vk::CommandBuffer::beginRendering(Image const& image, Image const* pDepthImage) -> void
@@ -250,9 +252,19 @@ auto vk::CommandBuffer::bindIndexBuffer16(Buffer& indexBuffer) -> void
     vkCmdBindIndexBuffer(m.buffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 }
 
+auto vk::CommandBuffer::bindIndexBuffer16(SwapBuffer& indexBuffer) -> void
+{
+    vkCmdBindIndexBuffer(m.buffer, indexBuffer(m.frameIndex), 0, VK_INDEX_TYPE_UINT16);
+}
+
 auto vk::CommandBuffer::bindIndexBuffer32(Buffer& indexBuffer) -> void
 {
     vkCmdBindIndexBuffer(m.buffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+}
+
+auto vk::CommandBuffer::bindIndexBuffer32(SwapBuffer& indexBuffer) -> void
+{
+    vkCmdBindIndexBuffer(m.buffer, indexBuffer(m.frameIndex), 0, VK_INDEX_TYPE_UINT32);
 }
 
 auto vk::CommandBuffer::bindPipeline(Pipeline& pipeline) -> void
@@ -260,7 +272,7 @@ auto vk::CommandBuffer::bindPipeline(Pipeline& pipeline) -> void
     m.currentPipeline = &pipeline;
     vkCmdBindPipeline(m.buffer, static_cast<VkPipelineBindPoint>(pipeline.getBindPoint()), pipeline);
 
-    auto const set{ VkDescriptorSet{pipeline} };
+    auto const set{ VkDescriptorSet{pipeline(m.frameIndex)} };
 
     if (set)
     {
@@ -287,14 +299,19 @@ auto vk::CommandBuffer::drawIndexed(u32 indexCount, u32 indexOffset, i32 vertexO
     vkCmdDrawIndexed(m.buffer, indexCount, 1, indexOffset, vertexOffset, 0);
 }
 
-auto vk::CommandBuffer::drawIndirect(vk::Buffer& buffer, u32 drawCount) -> void
+auto vk::CommandBuffer::drawIndirect(Buffer& buffer, u32 drawCount) -> void
 {
     vkCmdDrawIndirect(m.buffer, buffer, 0, drawCount, sizeof(VkDrawIndirectCommand));
 }
 
-auto vk::CommandBuffer::drawIndexedIndirectCount(Buffer &buffer, u32 maxDraws) -> void
+auto vk::CommandBuffer::drawIndexedIndirectCount(Buffer& buffer, u32 maxDraws) -> void
 {
     vkCmdDrawIndexedIndirectCount(m.buffer, buffer, sizeof(u32), buffer, 0, maxDraws, sizeof(VkDrawIndexedIndirectCommand));
+}
+
+auto vk::CommandBuffer::drawIndexedIndirectCount(SwapBuffer& buffer, u32 maxDraws) -> void
+{
+    vkCmdDrawIndexedIndirectCount(m.buffer, buffer(m.frameIndex), sizeof(u32), buffer(m.frameIndex), 0, maxDraws, sizeof(VkDrawIndexedIndirectCommand));
 }
 
 auto vk::CommandBuffer::allocate(Device* pDevice) -> void

@@ -17,6 +17,7 @@ namespace vk
 {
     class Device;
     class Buffer;
+    class SwapBuffer;
     class Image;
 
     class Pipeline
@@ -57,6 +58,7 @@ namespace vk
             ShaderStageFlags stage;
             DescriptorType   type;
             Buffer*          pBuffer;
+            SwapBuffer*      pSwapBuffer;
             size_t           offset;
             size_t           size;
         };
@@ -96,9 +98,10 @@ namespace vk
             return m.layout;
         }
 
-        inline operator VkDescriptorSet() const noexcept
+        template<typename T>
+        inline auto operator()(T frameIndex) const noexcept -> VkDescriptorSet
         {
-            return m.set;
+            return m.sets.empty() ? nullptr : m.sets[frameIndex];
         }
 
         inline auto getBindPoint() const noexcept
@@ -109,13 +112,13 @@ namespace vk
     private:
         struct M
         {
-            Device*               device;
-            VkPipelineLayout      layout;
-            VkPipeline            pipeline;
-            VkDescriptorSetLayout setLayout;
-            VkDescriptorSet       set;
-            BindPoint             point;
-            u32                   imagesBinding;
+            std::vector<VkDescriptorSet> sets;
+            Device*                      device;
+            VkPipelineLayout             layout;
+            VkPipeline                   pipeline;
+            VkDescriptorSetLayout        setLayout;
+            BindPoint                    point;
+            u32                          imagesBinding;
         } m;
     };
 }

@@ -7,6 +7,7 @@
 #include "Buffer.hpp"
 #include "Camera.hpp"
 #include "MeshLoader.hpp"
+#include "Thread.hpp"
 #include <memory>
 #include <imgui.h>
 
@@ -69,11 +70,12 @@ private:
         vk::Buffer meshPositionBuffer;
         vk::Buffer meshNormalBuffer;
         vk::Buffer meshCoordsBuffer;
-        vk::Buffer cameraUniformBuffer;
-        vk::Buffer imguiIndexBuffer;
-        vk::Buffer imguiVertexBuffer;
-        vk::Buffer imguiDrawBuffer;
-        vk::Buffer imguiIndirectBuffer;
+
+        vk::SwapBuffer cameraUniformBuffer;
+        vk::SwapBuffer imguiIndexBuffer;
+        vk::SwapBuffer imguiVertexBuffer;
+        vk::SwapBuffer imguiDrawBuffer;
+        vk::SwapBuffer imguiIndirectBuffer;
 
         vk::Pipeline mainPipeline;
         vk::Pipeline gridPipeline;

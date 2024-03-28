@@ -17,6 +17,6 @@ void main()
         discard;
     }
 
-
+    
     outColor = inColor * texture(fontTexture, inUv);
 }

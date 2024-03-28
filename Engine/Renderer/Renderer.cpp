@@ -115,10 +115,10 @@ auto Renderer::recordCommandsEmpty() -> void
 {
     for (auto i{ u32{} }; auto& commands : m.device.getCommandBuffers())
     {
-        commands.begin();
+        commands.begin(i);
         {
-            commands.beginPresent(i);
-            commands.endPresent(i);
+            commands.beginPresent();
+            commands.endPresent();
         }
         commands.end();
 
@@ -130,7 +130,7 @@ auto Renderer::recordCommands() -> void
 {
     for (auto i{ u32{} }; auto& commands : m.device.getCommandBuffers())
     {
-        commands.begin();
+        commands.begin(i);
         {
             commands.barrier(m.colorAttachment, vk::ImageLayout::eColorAttachment);
             commands.barrier(m.depthAttachment, vk::ImageLayout::eDepthAttachment);
@@ -145,7 +145,7 @@ auto Renderer::recordCommands() -> void
             commands.endRendering();
             commands.barrier(m.colorAttachment, vk::ImageLayout::eShaderRead);
 
-            commands.beginPresent(i);
+            commands.beginPresent();
 
             commands.bindPipeline(m.postProcessingPipeline);
             commands.draw(3);
@@ -154,7 +154,7 @@ auto Renderer::recordCommands() -> void
             commands.bindIndexBuffer16(m.imguiIndexBuffer);
             commands.drawIndexedIndirectCount(m.imguiIndirectBuffer, 1024);
 
-            commands.endPresent(i);
+            commands.endPresent();
         }
         commands.end();
 
@@ -229,7 +229,7 @@ auto Renderer::allocateResources() -> void
 
     m.indirectBuffer.write(m.indirectCommands.data(), m.indirectCommands.size() * sizeof(vk::DrawIndirectCommand));
 
-    m.cameraUniformBuffer = vk::Buffer{
+    m.cameraUniformBuffer = vk::SwapBuffer{
         m.device,
         sizeof(glm::mat4) * 3,
         vk::BufferUsage::eUniformBuffer,
@@ -277,10 +277,10 @@ auto Renderer::allocateResources() -> void
 
         auto const initDrawCount{ u32{} };
 
-        m.imguiVertexBuffer   = vk::Buffer{ m.device, vertexBufferSize,   vk::BufferUsage::eStorageBuffer,  vk::MemoryType::eHost };
-        m.imguiIndexBuffer    = vk::Buffer{ m.device, indexBufferSize,    vk::BufferUsage::eIndexBuffer,    vk::MemoryType::eHost };
-        m.imguiDrawBuffer     = vk::Buffer{ m.device, indexBufferSize,    vk::BufferUsage::eStorageBuffer,    vk::MemoryType::eHost };
-        m.imguiIndirectBuffer = vk::Buffer{ m.device, indirectBufferSize, vk::BufferUsage::eIndirectBuffer, vk::MemoryType::eHost };
+        m.imguiVertexBuffer   = vk::SwapBuffer{ m.device, vertexBufferSize,   vk::BufferUsage::eStorageBuffer,  vk::MemoryType::eHost };
+        m.imguiIndexBuffer    = vk::SwapBuffer{ m.device, indexBufferSize,    vk::BufferUsage::eIndexBuffer,    vk::MemoryType::eHost };
+        m.imguiDrawBuffer     = vk::SwapBuffer{ m.device, indexBufferSize,    vk::BufferUsage::eStorageBuffer,  vk::MemoryType::eHost };
+        m.imguiIndirectBuffer = vk::SwapBuffer{ m.device, indirectBufferSize, vk::BufferUsage::eIndirectBuffer, vk::MemoryType::eHost };
 
         m.imguiIndirectBuffer.write(&initDrawCount, sizeof(initDrawCount));
         m.imguiIndirectBuffer.flush(m.imguiIndirectBuffer.getSize());
@@ -302,7 +302,7 @@ auto Renderer::createPipelines() -> void
             { 1, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshPositionBuffer },
             { 2, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshCoordsBuffer },
             { 3, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.meshNormalBuffer },
-            { 4, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUniformBuffer }
+            { 4, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, nullptr, &m.cameraUniformBuffer }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
         .cullMode = vk::Pipeline::CullMode::eBack,
@@ -317,10 +317,10 @@ auto Renderer::createPipelines() -> void
             { .stage = vk::ShaderStage::eFragment, .path = "shaders/grid.frag.spv" }
         },
         .descriptors = {
-            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, &m.cameraUniformBuffer }
+            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eUniformBuffer, nullptr, &m.cameraUniformBuffer }
         },
         .topology = vk::Pipeline::Topology::eTriangleFan,
-        .cullMode = vk::Pipeline::CullMode::eNone,
+        .cullMode = vk::Pipeline::CullMode::eFront,
         .depthWrite = true,
         .depthTest = false,
         .colorBlending = true
@@ -333,8 +333,8 @@ auto Renderer::createPipelines() -> void
             { .stage = vk::ShaderStage::eFragment, .path = "shaders/imgui.frag.spv" }
         },
         .descriptors = {
-            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.imguiVertexBuffer },
-            { 1, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, &m.imguiDrawBuffer },
+            { 0, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, nullptr, &m.imguiVertexBuffer },
+            { 1, vk::ShaderStage::eVertex, vk::DescriptorType::eStorageBuffer, nullptr, &m.imguiDrawBuffer },
             { 2, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
@@ -354,7 +354,7 @@ auto Renderer::createPipelines() -> void
             { 0, vk::ShaderStage::eFragment, vk::DescriptorType::eCombinedImageSampler }
         },
         .topology = vk::Pipeline::Topology::eTriangleFan,
-        .cullMode = vk::Pipeline::CullMode::eNone
+        .cullMode = vk::Pipeline::CullMode::eFront
     }};
 
     m.postProcessingPipeline.writeImage(m.colorAttachment, 0, vk::DescriptorType::eCombinedImageSampler);

@@ -23,6 +23,8 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
 {
     if (!config.descriptors.empty())
     {
+        m.sets.resize(m.device->getCommandBuffers().size());
+
         auto bindings{ std::vector<VkDescriptorSetLayoutBinding>(config.descriptors.size()) };
         auto bindingFlags{ std::vector<VkDescriptorBindingFlags>(config.descriptors.size()) };
         auto writes{ std::vector<VkWriteDescriptorSet>{} }; writes.reserve(config.descriptors.size());
@@ -35,11 +37,11 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             bindings[i] = VkDescriptorSetLayoutBinding{
                 .binding = descriptor.binding,
                 .descriptorType = static_cast<VkDescriptorType>(descriptor.type),
-                .descriptorCount = descriptor.pBuffer ? 1u : 1024u,
+                .descriptorCount = (descriptor.pBuffer || descriptor.pSwapBuffer) ? 1u : 1024u,
                 .stageFlags = descriptor.stage
             };
 
-            bindingFlags[i] = descriptor.pBuffer ? 0u : VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+            bindingFlags[i] = (descriptor.pBuffer || descriptor.pSwapBuffer) ? 0u : VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
         }
 
         auto const setLayoutBindingFlags{ VkDescriptorSetLayoutBindingFlagsCreateInfo{
@@ -68,35 +70,66 @@ vk::Pipeline::Pipeline(Device& device, Config const& config)
             .pSetLayouts = &m.setLayout
         }};
 
-        if (vkAllocateDescriptorSets(*m.device, &descriptorSetAllocateInfo, &m.set))
+        for (auto& set : m.sets)
         {
-            throw std::runtime_error("Failed to allocate VkDescriptorSet");
+            if (vkAllocateDescriptorSets(*m.device, &descriptorSetAllocateInfo, &set))
+            {
+                throw std::runtime_error("Failed to allocate VkDescriptorSet");
+            }
         }
 
         for (auto i{ u32{} }; i < config.descriptors.size(); ++i)
         {
             auto const& descriptor{ config.descriptors[i] };
 
-            if (!descriptor.pBuffer)
+            if (!descriptor.pBuffer && !descriptor.pSwapBuffer)
             {
                 m.imagesBinding = descriptor.binding;
                 continue;
             }
 
-            bufferInfos.emplace_back(VkDescriptorBufferInfo{
-                .buffer = *descriptor.pBuffer,
-                .offset = descriptor.offset,
-                .range = descriptor.size ? descriptor.size : ~0ull
-            });
+            if (descriptor.pBuffer)
+            {
+                bufferInfos.emplace_back(VkDescriptorBufferInfo{
+                    .buffer = *descriptor.pBuffer,
+                    .offset = descriptor.offset,
+                    .range = descriptor.size ? descriptor.size : ~0ull
+                });
 
-            writes.emplace_back(VkWriteDescriptorSet{
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = m.set,
-                .dstBinding = descriptor.binding,
-                .descriptorCount = 1,
-                .descriptorType = static_cast<VkDescriptorType>(descriptor.type),
-                .pBufferInfo = &bufferInfos.back()
-            });
+                for (auto set : m.sets)
+                {
+                    writes.emplace_back(VkWriteDescriptorSet{
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = set,
+                        .dstBinding = descriptor.binding,
+                        .descriptorCount = 1,
+                        .descriptorType = static_cast<VkDescriptorType>(descriptor.type),
+                        .pBufferInfo = &bufferInfos.back()
+                    });
+                }
+            }
+            else if (descriptor.pSwapBuffer)
+            {
+                for (auto i{ u32{} }; auto set : m.sets)
+                {
+                    bufferInfos.emplace_back(VkDescriptorBufferInfo{
+                        .buffer = (*descriptor.pSwapBuffer)(i),
+                        .offset = descriptor.offset,
+                        .range = descriptor.size ? descriptor.size : ~0ull
+                    });
+
+                    writes.emplace_back(VkWriteDescriptorSet{
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = set,
+                        .dstBinding = descriptor.binding,
+                        .descriptorCount = 1,
+                        .descriptorType = static_cast<VkDescriptorType>(descriptor.type),
+                        .pBufferInfo = &bufferInfos.back()
+                    });
+
+                    ++i;
+                }
+            }
         }
 
         if (!writes.empty())
@@ -289,17 +322,20 @@ auto vk::Pipeline::writeImage(Image& image, u32 element, DescriptorType type) ->
         .imageLayout = static_cast<VkImageLayout>(image.getLayout()),
     }};
 
-    auto const write{ VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = m.set,
-        .dstBinding = m.imagesBinding,
-        .dstArrayElement = element,
-        .descriptorCount = 1,
-        .descriptorType = static_cast<VkDescriptorType>(type),
-        .pImageInfo = &imageInfo
-    }};
+    for (auto set : m.sets)
+    {
+        auto const write{ VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = set,
+            .dstBinding = m.imagesBinding,
+            .dstArrayElement = element,
+            .descriptorCount = 1,
+            .descriptorType = static_cast<VkDescriptorType>(type),
+            .pImageInfo = &imageInfo
+        }};
 
-    vkUpdateDescriptorSets(*m.device, 1, &write, 0, nullptr);
+        vkUpdateDescriptorSets(*m.device, 1, &write, 0, nullptr);
+    }
 
     image.setLayout(vk::ImageLayout::eUndefined);
 }

@@ -15,6 +15,7 @@ namespace vk
     class Image;
     class Pipeline;
     class Buffer;
+    class SwapBuffer;
 
     struct DrawIndirectCommand
     {
@@ -44,21 +45,24 @@ namespace vk
         auto operator=(CommandBuffer&& other) -> CommandBuffer&;
 
     public:
-        auto begin() -> void;
+        auto begin(u32 frameIndex = 0) -> void;
         auto end() -> void;
-        auto beginPresent(u32 imageIndex) -> void;
-        auto endPresent(u32 imageIndex) -> void;
+        auto beginPresent() -> void;
+        auto endPresent() -> void;
         auto beginRendering(Image const& image, Image const* pDepthImage = nullptr) -> void;
         auto endRendering() -> void;
         auto copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void;
         auto barrier(Image& image, ImageLayout layout) -> void;
         auto bindIndexBuffer16(Buffer& indexBuffer) -> void;
+        auto bindIndexBuffer16(SwapBuffer& indexBuffer) -> void;
         auto bindIndexBuffer32(Buffer& indexBuffer) -> void;
+        auto bindIndexBuffer32(SwapBuffer& indexBuffer) -> void;
         auto bindPipeline(Pipeline& pipeline) -> void;
         auto draw(u32 vertexCount) -> void;
         auto drawIndexed(u32 indexCount, u32 indexOffset = 0, i32 vertexOffset = 0) -> void;
         auto drawIndirect(Buffer& buffer, u32 drawCount) -> void;
         auto drawIndexedIndirectCount(Buffer& buffer, u32 maxDraws) -> void;
+        auto drawIndexedIndirectCount(SwapBuffer& buffer, u32 maxDraws) -> void;
         auto allocate(Device* pDevice) -> void;
 
     public:
@@ -76,6 +80,7 @@ namespace vk
             Pipeline*       currentPipeline;
             VkCommandPool   pool;
             VkCommandBuffer buffer;
+            u32             frameIndex;
         } m;
     };
 }
