@@ -12,13 +12,17 @@ layout(std430, binding = 1) restrict readonly buffer DrawBuffer
     vec4 clipRects[];
 };
 
+layout(push_constant) uniform PushConstant
+{
+    vec2 scale;
+};
+
 layout(location = 0) out vec2 outUv;
 layout(location = 1) out vec4 outColor;
 layout(location = 2) flat out vec4 outClipRect;
 
 void main()
 {
-    vec2 scale = vec2(2.f / 1920.f, 2.f / 1080.f * -1.f);
     Vertex v = vertices[gl_VertexIndex];
 
     outUv = vec2(v.u, v.v);

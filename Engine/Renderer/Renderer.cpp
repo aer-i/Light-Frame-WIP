@@ -128,6 +128,11 @@ auto Renderer::recordCommandsEmpty() -> void
 
 auto Renderer::recordCommands() -> void
 {
+    auto const viewportSize{ glm::vec2{
+        2.f / static_cast<f32>(m.device.getExtent().x),
+        2.f / static_cast<f32>(m.device.getExtent().y) * -1.f
+    }};
+
     for (auto i{ u32{} }; auto& commands : m.device.getCommandBuffers())
     {
         commands.begin(i);
@@ -151,6 +156,7 @@ auto Renderer::recordCommands() -> void
             commands.draw(3);
 
             commands.bindPipeline(m.imguiPipeline);
+            commands.pushConstant(&viewportSize, sizeof(viewportSize));
             commands.bindIndexBuffer16(m.imguiIndexBuffer);
             commands.drawIndexedIndirectCount(m.imguiIndirectBuffer, 1024);
 
@@ -339,7 +345,8 @@ auto Renderer::createPipelines() -> void
         },
         .topology = vk::Pipeline::Topology::eTriangleList,
         .cullMode = vk::Pipeline::CullMode::eNone,
-        .colorBlending = true
+        .colorBlending = true,
+        .usePushConstant = true
     }};
 
     m.imguiPipeline.writeImage(m.imguiFontTexture, 0, vk::DescriptorType::eCombinedImageSampler);

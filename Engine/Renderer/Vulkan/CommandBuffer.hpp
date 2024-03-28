@@ -49,6 +49,7 @@ namespace vk
         auto end() -> void;
         auto beginPresent() -> void;
         auto endPresent() -> void;
+        auto pushConstant(void const* pData, size_t dataSize) -> void;
         auto beginRendering(Image const& image, Image const* pDepthImage = nullptr) -> void;
         auto endRendering() -> void;
         auto copyBuffer(Buffer& source, Buffer& destination, size_t size) -> void;

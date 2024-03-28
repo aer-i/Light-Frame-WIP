@@ -74,6 +74,11 @@ auto vk::CommandBuffer::endPresent() -> void
     barrier(m.device->getSwapchainImage(m.frameIndex), ImageLayout::ePresent);
 }
 
+auto vk::CommandBuffer::pushConstant(const void* pData, size_t dataSize) -> void
+{
+    vkCmdPushConstants(m.buffer, *m.currentPipeline, VK_SHADER_STAGE_VERTEX_BIT, 0, dataSize, pData);
+}
+
 auto vk::CommandBuffer::beginRendering(Image const& image, Image const* pDepthImage) -> void
 {
     {

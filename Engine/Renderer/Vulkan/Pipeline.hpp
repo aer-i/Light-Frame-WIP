@@ -73,6 +73,7 @@ namespace vk
             bool                    depthWrite;
             bool                    depthTest;
             bool                    colorBlending;
+            bool                    usePushConstant;
         };
 
     public:
